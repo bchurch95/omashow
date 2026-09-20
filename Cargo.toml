@@ -2,6 +2,7 @@
 members = [
     "crates/omashow-core",
     "crates/omashow-cli",
+    "apps/omashow-tauri/src-tauri",
 ]
 resolver = "2"
 
