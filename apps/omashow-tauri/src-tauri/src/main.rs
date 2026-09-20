@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Manager, State, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 use omashow_core::{model_of, PptxDocument, SlideDimensions};
 use serde::Serialize;
@@ -31,6 +31,9 @@ fn main() {
             delete_slide,
             open_file_dialog,
             save_file_dialog,
+            list_monitors,
+            open_audience_window,
+            close_audience_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -204,4 +207,149 @@ fn save_file_dialog(app_handle: tauri::AppHandle) -> Result<Option<String>, Stri
         .add_filter("PowerPoint", &["pptx"])
         .blocking_save_file();
     Ok(file.map(|p| p.as_path().unwrap().to_string_lossy().to_string()))
+}
+
+const AUDIENCE_LABEL: &str = "audience";
+
+/// Audience display selection policy: an explicitly requested monitor name
+/// wins, then the first non-primary monitor, then the single (primary)
+/// monitor. Returns `None` when nothing matches or no display exists.
+fn pick_audience_index(monitors: &[(String, bool)], requested: Option<&str>) -> Option<usize> {
+    match requested {
+        Some(name) => monitors.iter().position(|(n, _)| n == name),
+        None => monitors
+            .iter()
+            .position(|(_, primary)| !primary)
+            .or_else(|| (!monitors.is_empty()).then_some(0)),
+    }
+}
+
+/// A display attached to the system, in logical (CSS) pixels.
+#[derive(Serialize, Clone)]
+struct MonitorInfo {
+    name: String,
+    is_primary: bool,
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+}
+
+#[tauri::command]
+fn list_monitors(app: tauri::AppHandle) -> Result<Vec<MonitorInfo>, String> {
+    let primary = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .and_then(|m| m.name().cloned());
+    Ok(app
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|m| {
+            let scale = m.scale_factor();
+            let size = *m.size();
+            let pos = *m.position();
+            MonitorInfo {
+                name: m.name().cloned().unwrap_or_else(|| "monitor".to_string()),
+                is_primary: m.name().cloned() == primary,
+                width: (size.width as f64 / scale).round() as u32,
+                height: (size.height as f64 / scale).round() as u32,
+                x: (pos.x as f64 / scale).round() as i32,
+                y: (pos.y as f64 / scale).round() as i32,
+            }
+        })
+        .collect())
+}
+
+/// Opens a borderless, fullscreen audience window on `monitor_name`, or on the
+/// first non-primary monitor when none is given. The window is non-minimizing,
+/// non-maximizing, and non-resizable, so focus changes on the primary monitor
+/// never hide or move it while the presenter multitasks in the console.
+#[tauri::command]
+fn open_audience_window(app: tauri::AppHandle, monitor_name: Option<String>) -> Result<String, String> {
+    if let Some(existing) = app.get_webview_window(AUDIENCE_LABEL) {
+        existing.close().map_err(|e| e.to_string())?;
+    }
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let primary_name = app
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .and_then(|m| m.name().cloned());
+    let specs: Vec<(String, bool)> = monitors
+        .iter()
+        .map(|m| {
+            let name = m.name().cloned().unwrap_or_default();
+            (name, m.name().cloned() == primary_name)
+        })
+        .collect();
+    let index = pick_audience_index(&specs, monitor_name.as_deref()).ok_or_else(|| {
+        match monitor_name.as_deref() {
+            Some(name) => format!("monitor '{name}' not found"),
+            None => "no display found".to_string(),
+        }
+    })?;
+    let monitor = &monitors[index];
+    let scale = monitor.scale_factor();
+    let size = *monitor.size();
+    let pos = *monitor.position();
+    WebviewWindowBuilder::new(&app, AUDIENCE_LABEL, tauri::WebviewUrl::App("audience.html".into()))
+        .title("Omashow — Audience")
+        .position(pos.x as f64 / scale, pos.y as f64 / scale)
+        .inner_size(size.width as f64 / scale, size.height as f64 / scale)
+        .decorations(false)
+        .fullscreen(true)
+        .minimizable(false)
+        .maximizable(false)
+        .resizable(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(monitor.name().cloned().unwrap_or_default())
+}
+
+#[tauri::command]
+fn close_audience_window(app: tauri::AppHandle) -> Result<(), String> {
+    match app.get_webview_window(AUDIENCE_LABEL) {
+        Some(win) => win.close().map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_audience_index;
+
+    fn names(names: &[&str], primary: usize) -> Vec<(String, bool)> {
+        names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.to_string(), i == primary))
+            .collect()
+    }
+
+    #[test]
+    fn requested_monitor_wins() {
+        let m = names(&["eDP-1", "HDMI-A-1"], 0);
+        assert_eq!(pick_audience_index(&m, Some("eDP-1")), Some(0));
+        assert_eq!(pick_audience_index(&m, Some("HDMI-A-1")), Some(1));
+    }
+
+    #[test]
+    fn unspecified_prefers_first_non_primary() {
+        let m = names(&["eDP-1", "HDMI-A-1", "DP-2"], 0);
+        assert_eq!(pick_audience_index(&m, None), Some(1));
+    }
+
+    #[test]
+    fn single_monitor_is_used() {
+        let m = names(&["eDP-1"], 0);
+        assert_eq!(pick_audience_index(&m, None), Some(0));
+    }
+
+    #[test]
+    fn unknown_or_empty_is_none() {
+        let m = names(&["eDP-1"], 0);
+        assert_eq!(pick_audience_index(&m, Some("DP-9")), None);
+        let empty: Vec<(String, bool)> = vec![];
+        assert_eq!(pick_audience_index(&empty, None), None);
+    }
 }
