@@ -13,11 +13,19 @@ struct Deck {
     path: Option<String>,
 }
 
+/// Path passed as `omashow-tauri <file.pptx>`; the frontend pulls it once on
+/// load and opens it, so no event can be missed before the webview boots.
+#[derive(Default)]
+struct InitialDeck(Option<String>);
+
 fn main() {
+    let open_path = std::env::args().skip(1).find(|a| !a.starts_with('-'));
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(Deck::default()))
+        .manage(InitialDeck(open_path))
         .invoke_handler(tauri::generate_handler![
+            initial_deck_path,
             new_presentation,
             open_pptx,
             open_presentation,
@@ -41,6 +49,11 @@ fn main() {
 
 fn project(doc: &PptxDocument) -> Result<String, String> {
     serde_json::to_string(&omashow_core::model_of(&doc.pres)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn initial_deck_path(state: State<'_, InitialDeck>) -> Option<String> {
+    state.0.clone()
 }
 
 /// Deck overview returned by `open_presentation`: metadata, the slide list,

@@ -48,87 +48,6 @@ function hasDeck() {
   $("notes-bar").style.display = model && model.slides.length > 0 ? "block" : "none";
 }
 
-// ---------- faithful slide rendering ----------
-// One slide's shapes drawn into a positioned container, scaled from EMU
-// slide coordinates: the filmstrip's .slide-thumb (mini) or #slide-stage.
-const NON_SOLID_FILLS = new Set(["none", "gradient", "pattern", "image"]);
-
-function renderSlideInto(container, content, mini = false) {
-  container.querySelectorAll(".slide-shape,.slide-pic").forEach((el) => el.remove());
-  const dims = content.slide_dimensions;
-  const w = container.clientWidth || (mini ? 244 : 960);
-  const pxPerEmu = w / dims.width_emu;
-  const pxPerInch = pxPerEmu * 914400;
-  drawShapes(container, content.shapes, pxPerEmu, pxPerInch, mini);
-}
-
-function drawShapes(container, shapes, pxPerEmu, pxPerInch, mini) {
-  for (const sh of shapes) {
-    if (sh.children) { drawShapes(container, sh.children, pxPerEmu, pxPerInch, mini); continue; }
-    if (sh.kind === "picture") {
-      if (!sh.bounds) continue;
-      const pic = document.createElement("div");
-      pic.className = "slide-pic";
-      place(pic, sh.bounds, pxPerEmu);
-      container.appendChild(pic);
-      continue;
-    }
-    if (sh.kind !== "autoshape" || !sh.bounds) continue;
-    const el = document.createElement("div");
-    el.className = "slide-shape";
-    place(el, sh.bounds, pxPerEmu);
-    if (sh.fill && !NON_SOLID_FILLS.has(sh.fill)) el.style.background = sh.fill;
-    if (sh.line && sh.line.color && sh.line.width_emu) {
-      const bw = Math.max(mini ? 1 : 0.5, (sh.line.width_emu / 914400) * pxPerInch);
-      el.style.border = bw + "px solid " + sh.line.color;
-    }
-    if (sh.runs.length) {
-      const basePt = sh.placeholder === "title" || sh.placeholder === "ctrTitle" ? 28 : 18;
-      el.style.fontSize = ptToPx(basePt, pxPerInch, mini);
-      const aligned = sh.runs.find((r) => r.alignment);
-      if (aligned) el.style.textAlign = aligned.alignment;
-      appendRuns(el, sh.runs, pxPerInch, mini);
-    }
-    container.appendChild(el);
-  }
-}
-
-function ptToPx(pt, pxPerInch, mini) {
-  const px = (pt / 72) * pxPerInch;
-  return (mini ? Math.max(4, Math.min(16, px)) : px) + "px";
-}
-
-function place(el, b, pxPerEmu) {
-  el.style.left = b.x_emu * pxPerEmu + "px";
-  el.style.top = b.y_emu * pxPerEmu + "px";
-  el.style.width = b.width_emu * pxPerEmu + "px";
-  el.style.height = b.height_emu * pxPerEmu + "px";
-}
-
-function appendRuns(el, runs, pxPerInch, mini = false) {
-  let para = 0;
-  for (const r of runs) {
-    if (r.paragraph !== para) {
-      el.appendChild(document.createElement("br"));
-      para = r.paragraph;
-    }
-    if (r.text === "\n") {
-      el.appendChild(document.createElement("br"));
-      continue;
-    }
-    const s = document.createElement("span");
-    s.textContent = r.text;
-    if (r.bold) s.style.fontWeight = "700";
-    if (r.italic) s.style.fontStyle = "italic";
-    if (r.color) s.style.color = r.color;
-    // Explicit sans fallback: an unknown family (e.g. Calibri on Linux) would
-    // otherwise degrade to the browser's default serif.
-    if (r.font_family) s.style.fontFamily = r.font_family + ", system-ui, sans-serif";
-    if (r.font_size_pt) s.style.fontSize = ptToPx(r.font_size_pt, pxPerInch, mini);
-    el.appendChild(s);
-  }
-}
-
 // ---------- slide content cache ----------
 // Per-slide shape content, fetched lazily from get_slide_content and cached
 // here so both the filmstrip and the canvas can paint from it.
@@ -157,9 +76,10 @@ function fitCanvas() {
     canvas.style.height = (d.height_emu / 914400) * 96 * pct + "px";
     return;
   }
-  const presenting = document.body.classList.contains("presenting");
-  const availW = presenting ? window.innerWidth : Math.max(100, $("preview-wrap").clientWidth - 56);
-  const availH = presenting ? window.innerHeight : Math.max(100, $("preview-wrap").clientHeight - 56);
+  // While presenting, #preview-wrap already shrinks to make room for the
+  // console side panel, so its box is the right reference in both modes.
+  const availW = Math.max(100, $("preview-wrap").clientWidth - 56);
+  const availH = Math.max(100, $("preview-wrap").clientHeight - 56);
   let w = availW;
   let h = (w * d.height_emu) / d.width_emu;
   if (h > availH) { h = availH; w = (h * d.width_emu) / d.height_emu; }
@@ -184,11 +104,80 @@ function enterPresent() {
   const host = $("main");
   if (host.requestFullscreen) host.requestFullscreen().catch(() => {});
   paintCurrentSlide();
+  updateConsole();
+  startTimer();
 }
 function exitPresent() {
   document.body.classList.remove("presenting");
   document.body.classList.remove("chrome-visible");
+  stopTimer();
+  invoke("close_audience_window").catch(() => {});
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+// ---------- presenter console: next slide, notes, timer ----------
+let presentStart = 0;
+let timerInt = null;
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  const mm = String(m).padStart(2, "0"), sec = String(ss).padStart(2, "0");
+  return h ? h + ":" + mm + ":" + sec : mm + ":" + sec;
+}
+function tickTimer() {
+  $("timer-elapsed").textContent = fmtElapsed(Date.now() - presentStart);
+  $("timer-clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function startTimer() {
+  presentStart = Date.now();
+  tickTimer();
+  clearInterval(timerInt);
+  timerInt = setInterval(tickTimer, 1000);
+}
+function stopTimer() {
+  clearInterval(timerInt);
+  timerInt = null;
+}
+
+function updateConsole() {
+  if (!model) return;
+  $("console-notes").textContent = currentSlide >= 0 ? (model.slides[currentSlide].notes || "") : "";
+  if (currentSlide < 0) { $("next-label").textContent = "—"; return; }
+  const next = currentSlide + 1;
+  if (next < model.slides.length) {
+    const t = model.slides[next].title;
+    $("next-label").textContent = "Slide " + (next + 1) + (t ? " — " + t : "");
+    fetchSlideContent(next);
+    const cached = slideContents.get(next);
+    if (cached) renderSlideInto($("next-thumb"), cached, true);
+  } else {
+    $("next-label").textContent = "End of deck";
+  }
+}
+
+// ---------- audience window event sync ----------
+function emitToAudience(event, payload) {
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if (ev) ev.emit(event, payload).catch(() => {});
+}
+let blackedOut = false;
+function toggleBlackout() {
+  if (!presenting()) return;
+  blackedOut = !blackedOut;
+  emitToAudience("blackout-toggle", { on: blackedOut });
+}
+
+async function startPresentation() {
+  if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+  enterPresent();
+  try {
+    const name = await invoke("open_audience_window", { monitorName: null });
+    flash("audience window on " + name);
+  } catch (e) { flash(String(e), "err"); }
+}
+
+if (window.__TAURI__ && window.__TAURI__.event) {
+  window.__TAURI__.event.listen("present-exit", () => exitPresent()).catch(() => {});
 }
 function nudgePresentChrome() {
   if (!presenting()) return;
@@ -233,6 +222,7 @@ function paintSlide(i, content) {
     fitCanvas();
     renderSlideInto($("slide-stage"), content, false);
   }
+  if (i === currentSlide + 1) renderSlideInto($("next-thumb"), content, true);
   updateInspector();
 }
 
@@ -365,6 +355,8 @@ function selectSlide(i) {
   if (active) active.scrollIntoView({ block: "nearest" });
   paintCurrentSlide();
   updatePreview();
+  updateConsole();
+  emitToAudience("slide-changed", { index: i });
 }
 
 function applyModel(data, selectLast = false) {
@@ -378,6 +370,7 @@ function applyModel(data, selectLast = false) {
   paintCurrentSlide();
   if (currentSlide < 0) clearSlideCounter();
   else updatePreview();
+  updateConsole();
   hasDeck();
 }
 
@@ -465,6 +458,7 @@ const commitNotes = debounce(() => {
       model = JSON.parse(m);
       markState("");
       flash("notes saved");
+      updateConsole();
     })
     .catch((e) => flash(String(e), "err"));
 }, 500);
@@ -483,6 +477,16 @@ document.addEventListener("keydown", (e) => {
   if (presenting() && (e.key === "Escape" || e.key.toLowerCase() === "q")) {
     e.preventDefault();
     exitPresent();
+    return;
+  }
+  if (e.key === "F5") {
+    e.preventDefault();
+    if (!presenting()) startPresentation();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "b") {
+    e.preventDefault();
+    toggleBlackout();
     return;
   }
   if (!model) return;
@@ -507,5 +511,13 @@ window.addEventListener("resize", () => {
     paintCurrentSlide();
   }, 200);
 });
+
+// Launched with a file argument? Open that deck once the UI is up.
+invoke("initial_deck_path").then((p) => {
+  if (!p) return;
+  invoke("open_presentation", { path: p })
+    .then((sum) => { currentSlide = 0; applyModel(sum); setPath(p); flash("opened"); })
+    .catch((e) => flash(String(e), "err"));
+}).catch(() => {});
 
 hasDeck();

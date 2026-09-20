@@ -20,16 +20,16 @@
 - [x] Build high-fidelity slide canvas preserving typography (fonts, sizes in pt, bold/italic, alignment) and proportional EMU bounding boxes.
 - [x] Run visual audit with `python3 visual_critic.py` and refine CSS/layout aesthetics until Qwen Vision scores the interface 8/10 or higher.
 
-## Milestone 4: Dual-Screen Presenter Mode & Multitasking
+## Milestone 4: Dual-Screen Presenter Mode & Multitasking (Complete)
 - [x] Implement Tauri multi-window commands (`open_audience_window(monitor_id)`, `close_audience_window`):
   - Detect secondary monitor/projector via Tauri display API and position audience window fullscreen.
   - Keep audience window visible, borderless, and non-minimizing when primary window loses OS focus during multitasking.
-- [ ] Build Presenter Console on primary screen:
+- [x] Build Presenter Console on primary screen:
   - Live active slide view + Next-slide preview thumbnail.
   - Formatted speaker notes extracted from PPTX (`pres.slides[i].notes`).
   - Elapsed presentation timer and current clock.
-- [ ] Real-time event synchronization between Presenter Console and Audience Window (`slide-changed`, `blackout-toggle`).
-- [ ] Keyboard navigation: `F5` (launch dual-screen presentation), `Space`/`ArrowRight` (advance), `ArrowLeft` (previous), `B` (blackout audience screen), `Escape` (exit).
+- [x] Real-time event synchronization between Presenter Console and Audience Window (`slide-changed`, `blackout-toggle`).
+- [x] Keyboard navigation: `F5` (launch dual-screen presentation), `Space`/`ArrowRight` (advance), `ArrowLeft` (previous), `B` (blackout audience screen), `Escape` (exit).
 
 ## Milestone 5: Slide Editing, Undo History & Filmstrip Reordering
 - [ ] Add `UndoStack` command pattern for all slide and text mutations.

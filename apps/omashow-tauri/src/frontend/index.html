@@ -192,6 +192,63 @@
       min-height: 0;
       background: radial-gradient(1100px 640px at 50% 44%, #202942 0%, #10131a 72%);
     }
+    /* ---------- presenter console (visible while presenting) ---------- */
+    #console-side {
+      display: none;
+      width: 340px;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px 20px;
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    #console-side h3 {
+      margin: 0 0 8px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #d0d8e6;
+    }
+    #next-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    #next-label {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #9aa3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .notes-block { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #console-notes {
+      flex: 1;
+      min-height: 40px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.55;
+      color: #c6cedd;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #console-timer {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
+    }
+    #timer-elapsed { font-size: 22px; font-weight: 650; color: #edf1f7; }
+    #timer-clock { font-size: 13px; color: #9aa3b8; }
     #slide-canvas {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -377,6 +434,8 @@
     body.presenting.chrome-visible #topbar { opacity: 1; pointer-events: auto; }
     body.presenting #preview-wrap { padding: 0; }
     body.presenting #slide-canvas { border: none; border-radius: 0; box-shadow: none; }
+    body.presenting #main { flex-direction: row; }
+    body.presenting #console-side { display: flex; }
     #status .ok { color: var(--green); }
     #status .err { color: var(--danger); }
     .vdiv { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; }
@@ -438,6 +497,21 @@
       <span class="vdiv"></span>
       <span id="status-msg"></span>
     </div>
+    <aside id="console-side">
+      <section class="console-block">
+        <h3>Up next</h3>
+        <div id="next-thumb"></div>
+        <div id="next-label">—</div>
+      </section>
+      <section class="console-block notes-block">
+        <h3>Speaker notes</h3>
+        <div id="console-notes"></div>
+      </section>
+      <footer id="console-timer">
+        <span id="timer-elapsed">00:00</span>
+        <span id="timer-clock">--:--</span>
+      </footer>
+    </aside>
   </div>
 
   <aside id="inspector">
@@ -449,6 +523,7 @@
     <div class="row"><span>Title</span><b id="insp-title">–</b></div>
   </aside>
   </div>
+  <script src="slide_render.js"></script>
   <script src="main.js"></script>
 </body>
 </html>
