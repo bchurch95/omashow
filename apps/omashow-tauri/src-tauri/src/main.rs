@@ -36,7 +36,13 @@ fn main() {
             set_title,
             set_notes,
             add_slide,
+            add_slide_at,
             delete_slide,
+            move_slide,
+            update_text_run,
+            undo_presentation,
+            redo_presentation,
+            undo_state,
             open_file_dialog,
             save_file_dialog,
             list_monitors,
@@ -198,6 +204,75 @@ fn delete_slide(slide: usize, state: State<'_, Mutex<Deck>>) -> Result<String, S
     let doc = deck.doc.as_mut().ok_or("no presentation open")?;
     doc.delete_slide(slide).map_err(|e| e.to_string())?;
     project(doc)
+}
+
+/// Insert a new slide at `index` (one past the end appends).
+#[tauri::command]
+fn add_slide_at(index: usize, title: Option<String>, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.add_slide_at(index, title).map_err(|e| e.to_string())?;
+    project(doc)
+}
+
+/// Move the slide at `from` so it ends up at position `to`.
+#[tauri::command]
+fn move_slide(from: usize, to: usize, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.move_slide(from, to).map_err(|e| e.to_string())?;
+    project(doc)
+}
+
+/// Replace the text of the shape `shape_id` on `slide`, keeping its base formatting.
+#[tauri::command]
+fn update_text_run(
+    slide: usize,
+    shape_id: u32,
+    new_text: String,
+    state: State<'_, Mutex<Deck>>,
+) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.update_text_run(slide, shape_id, &new_text).map_err(|e| e.to_string())?;
+    project(doc)
+}
+
+/// Undoes the most recent edit; returns the updated model.
+#[tauri::command]
+fn undo_presentation(state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.undo().ok_or("nothing to undo")?;
+    project(doc)
+}
+
+/// Re-applies the most recently undone edit.
+#[tauri::command]
+fn redo_presentation(state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.redo().ok_or("nothing to redo")?;
+    project(doc)
+}
+
+/// Undo/redo availability plus the last action's label, for toolbar state.
+#[derive(Serialize)]
+struct UndoState {
+    can_undo: bool,
+    can_redo: bool,
+    last: Option<String>,
+}
+
+#[tauri::command]
+fn undo_state(state: State<'_, Mutex<Deck>>) -> Result<UndoState, String> {
+    let deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
+    Ok(UndoState {
+        can_undo: doc.can_undo(),
+        can_redo: doc.can_redo(),
+        last: doc.undo_description(),
+    })
 }
 
 #[tauri::command]

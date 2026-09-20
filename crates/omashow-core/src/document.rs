@@ -21,7 +21,10 @@ use office_toolkit::powerpoint::Presentation;
 use office_toolkit::SaveToFile;
 use opc_ooxml::{Package, Relationship};
 
+use office_toolkit::powerpoint::Slide;
+
 use crate::error::Error;
+use crate::undo::{UndoCommand, UndoStack};
 
 /// A PPTX document: the editable model plus the original parts, for lossless saves.
 pub struct PptxDocument {
@@ -37,6 +40,8 @@ pub struct PptxDocument {
     is_new: bool,
     /// True once any edit has landed on the model since open/create.
     dirty: bool,
+    /// Command-pattern history of every mutation, for undo/redo.
+    history: UndoStack,
 }
 
 impl Default for PptxDocument {
@@ -54,6 +59,7 @@ impl PptxDocument {
             orig_bytes: Vec::new(),
             is_new: true,
             dirty: false,
+            history: UndoStack::new(),
         }
     }
 
@@ -69,6 +75,7 @@ impl PptxDocument {
             orig_bytes: bytes,
             is_new: false,
             dirty: false,
+            history: UndoStack::new(),
         })
     }
 
@@ -99,32 +106,126 @@ impl PptxDocument {
         crate::inspect::get_slide_shapes(&self.pres, slide)
     }
 
-    /// Set a slide's title in place.
+    /// Set a slide's title in place (undoable).
     pub fn set_title(&mut self, slide: usize, title: &str) -> Result<(), Error> {
+        let before = self.pres.slides.get(slide).map(|s| s.shapes.clone())
+            .ok_or(Error::OutOfRange(slide))?;
         crate::set_slide_title(&mut self.pres, slide, title)?;
+        self.history.record(UndoCommand::Shapes {
+            slide,
+            before,
+            after: self.pres.slides[slide].shapes.clone(),
+            description: "change title".into(),
+        });
         self.dirty = true;
         Ok(())
     }
 
-    /// Set (or clear) a slide's speaker notes in place.
+    /// Set (or clear) a slide's speaker notes in place (undoable).
     pub fn set_notes(&mut self, slide: usize, notes: Option<String>) -> Result<(), Error> {
+        let before = self.pres.slides.get(slide).map(|s| s.notes.clone())
+            .ok_or(Error::OutOfRange(slide))?;
         crate::set_slide_notes(&mut self.pres, slide, notes)?;
+        self.history.record(UndoCommand::Notes {
+            slide,
+            before,
+            after: self.pres.slides[slide].notes.clone(),
+            description: "change notes".into(),
+        });
         self.dirty = true;
         Ok(())
     }
 
-    /// Append a new slide (optionally titled) and return its index.
+    /// Append a new slide (optionally titled) and return its index (undoable).
     pub fn add_slide(&mut self, title: Option<String>) -> Result<usize, Error> {
-        let idx = crate::add_slide(&mut self.pres, title)?;
-        self.dirty = true;
+        self.add_slide_at(self.pres.slides.len(), title)
+    }
+
+    /// Insert a new slide at `index` (optionally titled) and return its index (undoable).
+    pub fn add_slide_at(&mut self, index: usize, title: Option<String>) -> Result<usize, Error> {
+        let before = self.pres.slides.get(index..).map(|t| t.to_vec()).ok_or(Error::OutOfRange(index))?;
+        let idx = crate::add_slide_at(&mut self.pres, index, title)?;
+        self.record_slice_change(idx, before, "add slide");
         Ok(idx)
     }
 
-    /// Remove a slide by index.
+    /// Remove a slide by index (undoable).
     pub fn delete_slide(&mut self, slide: usize) -> Result<(), Error> {
+        let before = self.pres.slides.get(slide..).map(|t| t.to_vec()).ok_or(Error::OutOfRange(slide))?;
         crate::delete_slide(&mut self.pres, slide)?;
+        self.record_slice_change(slide, before, "delete slide");
+        Ok(())
+    }
+
+    /// Move a slide so the one at `from` ends up at position `to` (undoable).
+    pub fn move_slide(&mut self, from: usize, to: usize) -> Result<(), Error> {
+        let before = self.pres.slides.clone();
+        crate::move_slide(&mut self.pres, from, to)?;
+        self.history.record(UndoCommand::Slides {
+            from: 0,
+            before,
+            after: self.pres.slides.clone(),
+            description: "move slide".into(),
+        });
         self.dirty = true;
         Ok(())
+    }
+
+    /// Replace the text of a shape on a slide, keeping its base formatting (undoable).
+    pub fn update_text_run(&mut self, slide: usize, shape_id: u32, new_text: &str) -> Result<(), Error> {
+        let before = self.pres.slides.get(slide).map(|s| s.shapes.clone())
+            .ok_or(Error::OutOfRange(slide))?;
+        crate::update_text_run(&mut self.pres, slide, shape_id, new_text)?;
+        self.history.record(UndoCommand::Shapes {
+            slide,
+            before,
+            after: self.pres.slides[slide].shapes.clone(),
+            description: "edit text".into(),
+        });
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Records a slide-list change anchored at `from`: the captured tail is
+    /// `slides[from..]` before the change, and the current tail is `after`.
+    fn record_slice_change(&mut self, from: usize, before_tail: Vec<Slide>, description: &str) {
+        let after_tail = self.pres.slides[from..].to_vec();
+        self.history.record(UndoCommand::Slides {
+            from,
+            before: before_tail,
+            after: after_tail,
+            description: description.into(),
+        });
+        self.dirty = true;
+    }
+
+    /// Undoes the most recent mutation; returns its description.
+    pub fn undo(&mut self) -> Option<String> {
+        let desc = self.history.undo(&mut self.pres)?;
+        self.dirty = true;
+        Some(desc)
+    }
+
+    /// Re-applies the most recently undone mutation; returns its description.
+    pub fn redo(&mut self) -> Option<String> {
+        let desc = self.history.redo(&mut self.pres)?;
+        self.dirty = true;
+        Some(desc)
+    }
+
+    /// Whether an undo is available.
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+
+    /// Whether a redo is available.
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
+
+    /// Description of the most recent mutation, for "Undo: …" UI labels.
+    pub fn undo_description(&self) -> Option<String> {
+        self.history.last_description().map(str::to_string)
     }
 
     /// Save the document to `path`.

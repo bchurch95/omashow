@@ -2,13 +2,13 @@ use serde::{Deserialize, Serialize};
 use office_toolkit::powerpoint::{Presentation, Slide, Shape, AutoShape, PlaceholderKind, Placeholder};
 use office_toolkit::drawing::{TextBody, TextParagraph, TextRun, TextRunProperties, ShapeProperties, Transform2D};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PresentationModel {
     pub title: String,
     pub slides: Vec<SlideModel>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SlideModel {
     pub index: usize,
     pub title: Option<String>,

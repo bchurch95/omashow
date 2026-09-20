@@ -28,6 +28,7 @@ function drawShapes(container, shapes, pxPerEmu, pxPerInch, mini) {
     if (sh.kind !== "autoshape" || !sh.bounds) continue;
     const el = document.createElement("div");
     el.className = "slide-shape";
+    el.dataset.shapeId = sh.id;
     place(el, sh.bounds, pxPerEmu);
     if (sh.fill && !NON_SOLID_FILLS.has(sh.fill)) el.style.background = sh.fill;
     if (sh.line && sh.line.color && sh.line.width_emu) {

@@ -1,6 +1,6 @@
 use office_toolkit::{OpenFile, SaveToFile};
 use office_toolkit::powerpoint::{AutoShape, Placeholder, PlaceholderKind, Shape, Slide};
-use office_toolkit::drawing::{ShapeProperties, TextBody, TextRun, Transform2D};
+use office_toolkit::drawing::{ShapeProperties, TextBody, TextParagraph, TextParagraphProperties, TextRun, TextRunProperties, Transform2D};
 
 use model::text_body_from_string;
 
@@ -9,6 +9,7 @@ pub mod model;
 pub mod io;
 pub mod document;
 pub mod inspect;
+pub mod undo;
 
 pub use document::PptxDocument;
 pub use error::Error;
@@ -18,6 +19,7 @@ pub use inspect::{
 };
 pub use model::{PresentationModel, SlideModel};
 pub use office_toolkit::powerpoint::Presentation;
+pub use undo::{UndoCommand, UndoStack};
 
 /// Open a PPTX file into a lightweight model (title + per-slide title/notes).
 pub fn open_pptx(path: &str) -> Result<PresentationModel, Error> {
@@ -80,20 +82,7 @@ pub fn set_slide_title(pres: &mut Presentation, slide: usize, title: &str) -> Re
     }
 
     // 3) No title shape at all — insert a standard one.
-    let id = next_shape_id(slide);
-    slide.shapes.push(Shape::AutoShape(
-        AutoShape::new(id, "Title")
-            .with_text_box(true)
-            .with_placeholder(Placeholder::new(PlaceholderKind::Title))
-            .with_properties(
-                ShapeProperties::new().with_transform(
-                    Transform2D::new()
-                        .with_offset(685_800, 342_900)
-                        .with_extent(10_820_400, 1_325_555),
-                ),
-            )
-            .with_text_body(text_body_from_string(&title)),
-    ));
+    slide.shapes.push(title_shape(&title, next_shape_id(slide)));
     Ok(())
 }
 
@@ -115,19 +104,7 @@ pub fn add_slide(pres: &mut Presentation, title: Option<String>) -> Result<usize
     let mut s = Slide::new();
     if let Some(title) = title {
         if !title.trim().is_empty() {
-            s.shapes.push(Shape::AutoShape(
-                AutoShape::new(2, "Title")
-                    .with_text_box(true)
-                    .with_placeholder(Placeholder::new(PlaceholderKind::Title))
-                    .with_properties(
-                        ShapeProperties::new().with_transform(
-                            Transform2D::new()
-                                .with_offset(685_800, 342_900)
-                                .with_extent(10_820_400, 1_325_555),
-                        ),
-                    )
-                    .with_text_body(text_body_from_string(&title)),
-            ));
+            s.shapes.push(title_shape(&title, 2));
         }
     }
     pres.slides.push(s);
@@ -141,6 +118,123 @@ pub fn delete_slide(pres: &mut Presentation, slide: usize) -> Result<(), Error> 
     }
     pres.slides.remove(slide);
     Ok(())
+}
+
+/// Insert a new slide with an optional title at `index`. An index one past the
+/// end appends; anything farther is an error.
+pub fn add_slide_at(pres: &mut Presentation, index: usize, title: Option<String>) -> Result<usize, Error> {
+    if index > pres.slides.len() {
+        return Err(Error::OutOfRange(index));
+    }
+    let mut s = Slide::new();
+    if let Some(title) = title {
+        if !title.trim().is_empty() {
+            s.shapes.push(title_shape(&title, 2));
+        }
+    }
+    pres.slides.insert(index, s);
+    Ok(index)
+}
+
+/// Move the slide at `from` so it ends up at position `to` in the final order.
+/// `to` is interpreted in final-list coordinates, so `move_slide(0, 2)` on a
+/// 3-slide deck sends slide 1 to the end.
+pub fn move_slide(pres: &mut Presentation, from: usize, to: usize) -> Result<(), Error> {
+    if from >= pres.slides.len() {
+        return Err(Error::OutOfRange(from));
+    }
+    if to >= pres.slides.len() {
+        return Err(Error::OutOfRange(to));
+    }
+    if from == to {
+        return Ok(());
+    }
+    let slide = pres.slides.remove(from);
+    pres.slides.insert(to.min(pres.slides.len()), slide);
+    Ok(())
+}
+
+/// Replace the text of the shape identified by `shape_id` on `slide`.
+/// Searches top-level shapes and one level into groups. The replacement text
+/// is laid out as one paragraph per line and inherits the shape's original
+/// first-paragraph and first-run formatting (alignment, font, size, color),
+/// so editing a run does not flatten the shape's style.
+pub fn update_text_run(pres: &mut Presentation, slide: usize, shape_id: u32, new_text: &str) -> Result<(), Error> {
+    let slide = pres.slides.get_mut(slide).ok_or(Error::OutOfRange(slide))?;
+    let target = find_autoshape(&mut slide.shapes, shape_id).ok_or(Error::ShapeNotFound(shape_id))?;
+    let (para_props, run_props) = target.text_body.as_ref().map(|tb| {
+        let para_props = tb.paragraphs.first().and_then(|p| p.properties.clone());
+        let run_props = tb.paragraphs.iter().find_map(|p| {
+            p.runs.iter().find_map(|r| match r {
+                TextRun::Regular { properties, .. } => Some(properties.clone()),
+                _ => None,
+            })
+        });
+        (para_props, run_props)
+    }).unwrap_or_default();
+    target.text_body = Some(rebuild_text_body(new_text, para_props, run_props));
+    Ok(())
+}
+
+/// Finds an autoshape by its `cNvPr` id, searching top-level shapes and the
+/// direct children of group shapes.
+fn find_autoshape(shapes: &mut [Shape], id: u32) -> Option<&mut AutoShape> {
+    for shape in shapes.iter_mut() {
+        match shape {
+            Shape::AutoShape(auto) if auto.id == id => return Some(auto),
+            Shape::Group(group) => {
+                if let Some(found) = find_autoshape(&mut group.shapes, id) {
+                    return Some(found);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Builds a text body with one paragraph per line of `text`, reusing the
+/// captured paragraph/run properties when present.
+fn rebuild_text_body(
+    text: &str,
+    para_props: Option<TextParagraphProperties>,
+    run_props: Option<TextRunProperties>,
+) -> TextBody {
+    let mut body = TextBody::new();
+    let lines: Vec<&str> = if text.is_empty() {
+        vec![""]
+    } else {
+        text.lines().collect()
+    };
+    for line in lines {
+        let mut para = TextParagraph::new();
+        if let Some(props) = &para_props {
+            para = para.with_properties(props.clone());
+        }
+        if !line.is_empty() {
+            let props = run_props.clone().unwrap_or_default();
+            para = para.with_run(TextRun::Regular { text: line.to_string(), properties: props });
+        }
+        body = body.with_paragraph(para);
+    }
+    body
+}
+
+/// The standard title text box used when a slide has no title placeholder.
+fn title_shape(title: &str, id: u32) -> Shape {
+    Shape::AutoShape(
+        AutoShape::new(id, "Title")
+            .with_text_box(true)
+            .with_placeholder(Placeholder::new(PlaceholderKind::Title))
+            .with_properties(
+                ShapeProperties::new().with_transform(
+                    Transform2D::new()
+                        .with_offset(685_800, 342_900)
+                        .with_extent(10_820_400, 1_325_555),
+                ),
+            )
+            .with_text_body(text_body_from_string(title)),
+    )
 }
 
 /// Replace the whole deck (e.g. after a "New" action).

@@ -261,6 +261,7 @@ function paintCurrentSlide() {
 }
 
 // ---------- filmstrip ----------
+let dragFrom = -1;
 function renderFilmstrip() {
   const list = $("slides");
   list.innerHTML = "";
@@ -314,6 +315,7 @@ function renderFilmstrip() {
           fetchSlideContent(i, true);
           flash("title saved");
           markState("edited");
+          refreshUndoUI();
         })
         .catch((e) => flash(String(e), "err"));
     }, 400);
@@ -323,6 +325,48 @@ function renderFilmstrip() {
     cap.append(idx, input);
     item.append(thumb, cap);
     item.addEventListener("click", () => selectSlide(i));
+
+    // drag & drop reorder: grab a thumb, drop it on another slide
+    item.draggable = true;
+    item.addEventListener("dragstart", (e) => {
+      if (e.target.closest("input,button")) { e.preventDefault(); return; }
+      dragFrom = i;
+      e.dataTransfer.effectAllowed = "move";
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => {
+      dragFrom = -1;
+      item.classList.remove("dragging");
+      list.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+    });
+    item.addEventListener("dragover", (e) => {
+      if (dragFrom < 0 || dragFrom === i) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      item.classList.add("drag-over");
+    });
+    item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (dragFrom < 0 || dragFrom === i) return;
+      const from = dragFrom;
+      dragFrom = -1;
+      item.classList.remove("drag-over");
+      const follow = currentSlide === from;
+      invoke("move_slide", { from, to: i })
+        .then((m) => {
+          if (follow) currentSlide = i;
+          model = JSON.parse(m);
+          renderFilmstrip();
+          refreshThumbs();
+          paintCurrentSlide();
+          updatePreview();
+          refreshUndoUI();
+          markState("edited");
+          flash("slide moved");
+        })
+        .catch((err) => flash(String(err), "err"));
+    });
     list.appendChild(item);
 
     const cached = slideContents.get(i);
@@ -372,6 +416,7 @@ function applyModel(data, selectLast = false) {
   else updatePreview();
   updateConsole();
   hasDeck();
+  refreshUndoUI();
 }
 
 // ---------- actions ----------
@@ -434,18 +479,105 @@ $("notes-label").onclick = () => $("notes-bar").classList.toggle("collapsed");
 $("btn-present").onclick = enterPresent;
 syncZoomUI();
 const addSlide = () => {
-  invoke("add_slide", { title: null })
+  const idx = Math.max(0, currentSlide + 1);
+  invoke("add_slide_at", { index: idx, title: null })
     .then((m) => {
-      applyModel(m, true);
+      applyModel(m);
+      currentSlide = idx;
+      renderFilmstrip();
       markState("edited");
       flash("slide added");
-      const items = document.querySelectorAll(".slide-item");
-      const last = items[items.length - 1];
-      if (last) last.querySelector("input").focus();
+      const item = document.querySelectorAll(".slide-item")[idx];
+      if (item) item.querySelector("input").focus();
     })
     .catch((e) => flash(String(e), "err"));
 };
 $("btn-add").onclick = addSlide;
+
+// ---------- undo / redo ----------
+function refreshUndoUI() {
+  const u = $("btn-undo"), r = $("btn-redo");
+  if (!model) { u.disabled = true; r.disabled = true; return; }
+  invoke("undo_state")
+    .then((s) => {
+      u.disabled = !s.can_undo;
+      u.title = s.can_undo ? "Undo: " + s.last + " (Ctrl+Z)" : "Nothing to undo";
+      r.disabled = !s.can_redo;
+    })
+    .catch(() => {});
+}
+function doUndo() {
+  invoke("undo_presentation")
+    .then((m) => { applyModel(m); markState("edited"); flash("undone"); })
+    .catch((e) => flash(String(e), "err"));
+}
+function doRedo() {
+  invoke("redo_presentation")
+    .then((m) => { applyModel(m); markState("edited"); flash("redone"); })
+    .catch((e) => flash(String(e), "err"));
+}
+$("btn-undo").onclick = doUndo;
+$("btn-redo").onclick = doRedo;
+
+// ---------- text editing: double-click a shape to edit its text ----------
+function findShapeById(shapes, id) {
+  for (const s of shapes) {
+    if (s.id === id) return s;
+    if (s.children) {
+      const hit = findShapeById(s.children, id);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+const textEdit = $("text-edit");
+let textEditCtx = null;
+function openTextEdit(el) {
+  if (presenting() || !model) return;
+  const shapeId = Number(el.dataset.shapeId);
+  if (!shapeId) return;
+  const content = slideContents.get(currentSlide);
+  const shape = content && findShapeById(content.shapes, shapeId);
+  const initial = shape && shape.text != null ? shape.text : el.innerText;
+  const canvas = $("slide-canvas").getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  textEditCtx = { slide: currentSlide, shapeId, initial };
+  textEdit.value = initial;
+  textEdit.style.left = (r.left - canvas.left) + "px";
+  textEdit.style.top = (r.top - canvas.top) + "px";
+  textEdit.style.width = r.width + "px";
+  textEdit.style.height = r.height + "px";
+  textEdit.style.fontSize = getComputedStyle(el).fontSize;
+  textEdit.style.display = "block";
+  textEdit.focus();
+  textEdit.select();
+}
+function closeTextEdit(commit) {
+  if (!textEditCtx) return;
+  const ctx = textEditCtx;
+  textEditCtx = null;
+  textEdit.style.display = "none";
+  const val = textEdit.value;
+  if (!commit || val === ctx.initial) return;
+  invoke("update_text_run", { slide: ctx.slide, shapeId: ctx.shapeId, newText: val })
+    .then(() => {
+      fetchSlideContent(ctx.slide, true);
+      markState("edited");
+      refreshUndoUI();
+      flash("text updated");
+    })
+    .catch((e) => flash(String(e), "err"));
+}
+textEdit.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); closeTextEdit(true); }
+  else if (e.key === "Escape") { e.preventDefault(); closeTextEdit(false); }
+});
+textEdit.addEventListener("blur", () => closeTextEdit(true));
+$("slide-stage").addEventListener("dblclick", (e) => {
+  const el = e.target.closest(".slide-shape[data-shape-id]");
+  if (el) openTextEdit(el);
+});
 
 // notes editor — live, debounced
 const commitNotes = debounce(() => {
@@ -459,6 +591,7 @@ const commitNotes = debounce(() => {
       markState("");
       flash("notes saved");
       updateConsole();
+      refreshUndoUI();
     })
     .catch((e) => flash(String(e), "err"));
 }, 500);
@@ -473,6 +606,14 @@ notesInput.addEventListener("input", () => {
 
 // ---------- keyboard: arrows switch slides, Esc ends the show ----------
 document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z" || e.key === "y" || e.key === "Y")) {
+    if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+      if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") doRedo();
+      else doUndo();
+      return;
+    }
+  }
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
   if (presenting() && (e.key === "Escape" || e.key.toLowerCase() === "q")) {
     e.preventDefault();

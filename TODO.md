@@ -31,11 +31,11 @@
 - [x] Real-time event synchronization between Presenter Console and Audience Window (`slide-changed`, `blackout-toggle`).
 - [x] Keyboard navigation: `F5` (launch dual-screen presentation), `Space`/`ArrowRight` (advance), `ArrowLeft` (previous), `B` (blackout audience screen), `Escape` (exit).
 
-## Milestone 5: Slide Editing, Undo History & Filmstrip Reordering
-- [ ] Add `UndoStack` command pattern for all slide and text mutations.
-- [ ] Add `update_text_run(slide_idx, shape_id, new_text)` in `omashow-core`.
-- [ ] Add `add_blank_slide(index)` and `delete_slide(index)` with filmstrip drag/reorder controls.
-- [ ] Connect Tauri frontend text editing events to core mutation commands.
+## Milestone 5: Slide Editing, Undo History & Filmstrip Reordering (Complete)
+- [x] Add `UndoStack` command pattern for all slide and text mutations.
+- [x] Add `update_text_run(slide_idx, shape_id, new_text)` in `omashow-core`.
+- [x] Add `add_blank_slide(index)` and `delete_slide(index)` with filmstrip drag/reorder controls.
+- [x] Connect Tauri frontend text editing events to core mutation commands.
 
 ## Milestone 6: Image Extraction & Multi-Vendor Corpus Testing
 - [ ] Support `<p:pic>` shape extraction and map embedded media relationships (`ppt/media/*`).
