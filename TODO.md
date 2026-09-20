@@ -18,7 +18,7 @@
   - `save_presentation(path)`.
 - [x] Implement thumbnail filmstrip sidebar in the Tauri frontend with slide numbers and active indicator.
 - [x] Build high-fidelity slide canvas preserving typography (fonts, sizes in pt, bold/italic, alignment) and proportional EMU bounding boxes.
-- [ ] Run visual audit with `python3 visual_critic.py` and refine CSS/layout aesthetics until Qwen Vision scores the interface 8/10 or higher.
+- [x] Run visual audit with `python3 visual_critic.py` and refine CSS/layout aesthetics until Qwen Vision scores the interface 8/10 or higher.
 
 ## Milestone 4: Dual-Screen Presenter Mode & Multitasking
 - [ ] Implement Tauri multi-window commands (`open_audience_window(monitor_id)`, `close_audience_window`):
@@ -49,3 +49,4 @@
 - [ ] Implement secondary display routing for AirPlay / external screens via `UIScreen` / `UIWindowScene` (dedicated audience window, avoiding simple mirroring).
 - [ ] Support Split View / Slide Over multitasking with live AirPlay slide presentation.
 - [ ] Background AirPlay video stream mode allowing complete app minimization while keeping audience slides active.
+es active.
