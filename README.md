@@ -9,8 +9,15 @@ Modern PowerPoint clone built in Rust.
 
 ## Getting started
 
+Create a demo PPTX:
 ```bash
-cargo run --bin omashow-tauri
+cargo run --example create_demo -p omashow-core
+```
+
+Run Tauri app:
+```bash
+cd apps/omashow-tauri
+cargo tauri dev
 ```
 
 ## Development
@@ -20,6 +27,9 @@ git init
 git add .
 git commit -m "Initial scaffold"
 ```
+
+Project is a Cargo workspace. Core is pure Rust, UI is Tauri + web.
+
 
 ## Roadmap
 
