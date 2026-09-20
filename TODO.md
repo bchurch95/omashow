@@ -42,3 +42,10 @@
 - [ ] Render embedded slide pictures inside the Tauri slide canvas.
 - [ ] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote.
 - [ ] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors.
+
+## Stretch Milestone: iPadOS & AirPlay External Display Support
+- [ ] Add touch navigation gestures to slide viewer (swipe left/right to advance, tap to toggle notes).
+- [ ] Configure Tauri v2 iOS/iPadOS mobile target (`cargo tauri ios`).
+- [ ] Implement secondary display routing for AirPlay / external screens via `UIScreen` / `UIWindowScene` (dedicated audience window, avoiding simple mirroring).
+- [ ] Support Split View / Slide Over multitasking with live AirPlay slide presentation.
+- [ ] Background AirPlay video stream mode allowing complete app minimization while keeping audience slides active.
