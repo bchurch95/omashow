@@ -6,3 +6,10 @@ apps/omashow-tauri/src-tauri/target
 .DS_Store
 *.pptx
 *.pdf
+*.log
+latest_ui_*.png
+latest_ui_*.json
+supervisor.py
+tracker.py
+run_pi_loop.sh
+visual_critic.py
