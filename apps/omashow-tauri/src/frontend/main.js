@@ -37,17 +37,45 @@ function hasDeck() {
   $("notes-bar").style.display = model && model.slides.length > 0 ? "block" : "none";
 }
 
-function renderSlides() {
+// ---------- thumbnail filmstrip ----------
+// Per-slide shape content, fetched lazily from get_slide_content and cached
+// here so the filmstrip can paint a scaled-down replica of each slide.
+const slideContents = new Map();
+
+function renderFilmstrip() {
   const list = $("slides");
   list.innerHTML = "";
   if (!model) return;
   model.slides.forEach((s, i) => {
-    const row = document.createElement("div");
-    row.className = "slide-row" + (i === currentSlide ? " active" : "");
+    const item = document.createElement("div");
+    item.className = "slide-item" + (i === currentSlide ? " active" : "");
 
-    const num = document.createElement("div");
+    const thumb = document.createElement("div");
+    thumb.className = "slide-thumb";
+
+    const num = document.createElement("span");
     num.className = "slide-num";
     num.textContent = i + 1;
+
+    const del = document.createElement("button");
+    del.className = "slide-del";
+    del.textContent = "\u00d7";
+    del.title = "Delete slide";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      invoke("delete_slide", { slide: i })
+        .then((m) => {
+          model = JSON.parse(m);
+          currentSlide = Math.min(currentSlide, model.slides.length - 1);
+          renderFilmstrip();
+          refreshThumbs();
+          updatePreview();
+          flash("slide deleted");
+        })
+        .catch((err) => flash(String(err), "err"));
+    });
+
+    thumb.append(num, del);
 
     const input = document.createElement("input");
     input.className = "slide-title";
@@ -60,7 +88,9 @@ function renderSlides() {
       invoke("set_title", { slide: i, title: input.value })
         .then((m) => {
           model = JSON.parse(m);
+          renderFilmstrip();
           if (i === currentSlide) updatePreview();
+          fetchSlideContent(i, true);
           flash("title saved");
         })
         .catch((e) => flash(String(e), "err"));
@@ -68,27 +98,98 @@ function renderSlides() {
     input.addEventListener("input", commit);
     input.addEventListener("blur", () => commit());
 
-    const del = document.createElement("button");
-    del.className = "slide-del";
-    del.textContent = "×";
-    del.title = "Delete slide";
-    del.addEventListener("click", (e) => {
-      e.stopPropagation();
-      invoke("delete_slide", { slide: i })
-        .then((m) => {
-          model = JSON.parse(m);
-          currentSlide = Math.min(currentSlide, model.slides.length - 1);
-          renderSlides();
-          updatePreview();
-          flash("slide deleted");
-        })
-        .catch((err) => flash(String(err), "err"));
-    });
+    item.append(thumb, input);
+    item.addEventListener("click", () => selectSlide(i));
+    list.appendChild(item);
 
-    row.append(num, input, del);
-    row.addEventListener("click", () => selectSlide(i));
-    list.appendChild(row);
+    const cached = slideContents.get(i);
+    if (cached) paintThumb(thumb, cached);
   });
+}
+
+function fetchSlideContent(i, force = false) {
+  if (!model || i < 0 || i >= model.slides.length) return;
+  if (!force && slideContents.has(i)) return;
+  invoke("get_slide_content", { slide: i })
+    .then((content) => {
+      slideContents.set(i, content);
+      const item = document.querySelectorAll(".slide-item")[i];
+      if (item) paintThumb(item.querySelector(".slide-thumb"), content);
+    })
+    .catch(() => {});
+}
+
+function refreshThumbs() {
+  slideContents.clear();
+  if (!model) return;
+  model.slides.forEach((_, i) => fetchSlideContent(i));
+}
+
+// Paint a scaled-down copy of one slide into a .slide-thumb element.
+function paintThumb(thumb, content) {
+  thumb.querySelectorAll(".mini-shape,.mini-pic").forEach((el) => el.remove());
+  const dims = content.slide_dimensions;
+  thumb.style.aspectRatio = dims.width_emu + " / " + dims.height_emu;
+  const w = thumb.clientWidth || 244;
+  const pxPerEmu = w / dims.width_emu;
+  const pxPerInch = pxPerEmu * 914400;
+
+  const draw = (shapes) => {
+    for (const sh of shapes) {
+      if (sh.children) { draw(sh.children); continue; }
+      if (sh.kind === "picture") {
+        if (!sh.bounds) continue;
+        const pic = document.createElement("div");
+        pic.className = "mini-pic";
+        place(pic, sh.bounds, pxPerEmu);
+        thumb.appendChild(pic);
+        continue;
+      }
+      if (sh.kind !== "autoshape" || !sh.bounds || !sh.runs.length) continue;
+      const el = document.createElement("div");
+      el.className = "mini-shape";
+      place(el, sh.bounds, pxPerEmu);
+      const basePt = sh.placeholder === "title" || sh.placeholder === "ctrTitle" ? 28 : 18;
+      el.style.fontSize = clampPx((basePt / 72) * pxPerInch);
+      if (sh.runs[0].color) el.style.color = sh.runs[0].color;
+      appendRuns(el, sh.runs, pxPerInch);
+      thumb.appendChild(el);
+    }
+  };
+  draw(content.shapes);
+}
+
+function place(el, b, pxPerEmu) {
+  el.style.left = b.x_emu * pxPerEmu + "px";
+  el.style.top = b.y_emu * pxPerEmu + "px";
+  el.style.width = b.width_emu * pxPerEmu + "px";
+  el.style.height = b.height_emu * pxPerEmu + "px";
+}
+
+function clampPx(px) {
+  return Math.max(4, Math.min(16, px)) + "px";
+}
+
+function appendRuns(el, runs, pxPerInch) {
+  let para = 0;
+  for (const r of runs) {
+    if (r.paragraph !== para) {
+      el.appendChild(document.createElement("br"));
+      para = r.paragraph;
+    }
+    if (r.text === "\n") {
+      el.appendChild(document.createElement("br"));
+      continue;
+    }
+    const s = document.createElement("span");
+    s.textContent = r.text;
+    if (r.bold) s.style.fontWeight = "700";
+    if (r.italic) s.style.fontStyle = "italic";
+    if (r.color) s.style.color = r.color;
+    if (r.font_family) s.style.fontFamily = r.font_family;
+    if (r.font_size_pt) s.style.fontSize = clampPx((r.font_size_pt / 72) * pxPerInch);
+    el.appendChild(s);
+  }
 }
 
 function updatePreview() {
@@ -108,15 +209,20 @@ function updatePreview() {
 function selectSlide(i) {
   if (i === currentSlide) { updatePreview(); return; }
   currentSlide = i;
-  renderSlides();
+  document.querySelectorAll(".slide-item").forEach((el, j) => {
+    el.classList.toggle("active", j === i);
+  });
+  const active = document.querySelectorAll(".slide-item")[i];
+  if (active) active.scrollIntoView({ block: "nearest" });
   updatePreview();
 }
 
-function applyModel(json, selectLast = false) {
-  model = JSON.parse(json);
+function applyModel(data, selectLast = false) {
+  model = typeof data === "string" ? JSON.parse(data) : data;
   if (selectLast) currentSlide = model.slides.length - 1;
   if (currentSlide >= model.slides.length) currentSlide = model.slides.length - 1;
-  renderSlides();
+  renderFilmstrip();
+  refreshThumbs();
   updatePreview();
   hasDeck();
 }
@@ -137,9 +243,9 @@ $("btn-open").onclick = async () => {
   try {
     const path = await invoke("open_file_dialog");
     if (!path) return;
-    const m = await invoke("open_pptx", { path });
+    const p = await invoke("open_presentation", { path });
     currentSlide = 0;
-    applyModel(m);
+    applyModel(p);
     setPath(path);
     flash("opened");
   } catch (e) { flash(String(e), "err"); }
@@ -168,8 +274,8 @@ $("btn-add").onclick = () => {
     .then((m) => {
       applyModel(m, true);
       flash("slide added");
-      const rows = document.querySelectorAll(".slide-row");
-      const last = rows[rows.length - 1];
+      const items = document.querySelectorAll(".slide-item");
+      const last = items[items.length - 1];
       if (last) last.querySelector("input").focus();
     })
     .catch((e) => flash(String(e), "err"));
@@ -205,7 +311,8 @@ titleEl.addEventListener("blur", () => {
   invoke("set_title", { slide: currentSlide, title: val })
     .then((m) => {
       model = JSON.parse(m);
-      renderSlides();
+      renderFilmstrip();
+      fetchSlideContent(currentSlide, true);
       updatePreview();
       flash("title saved");
     })
@@ -224,6 +331,19 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
     if (currentSlide > 0) selectSlide(currentSlide - 1);
   }
+});
+
+// Re-paint thumbnails when the window resizes (font scaling is px-based).
+let resizeT = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => {
+    if (!model) return;
+    document.querySelectorAll(".slide-item").forEach((item, i) => {
+      const cached = slideContents.get(i);
+      if (cached) paintThumb(item.querySelector(".slide-thumb"), cached);
+    });
+  }, 200);
 });
 
 hasDeck();
