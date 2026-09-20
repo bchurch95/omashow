@@ -10,4 +10,7 @@ pub enum Error {
     
     #[error("Serialization error: {0}")]
     Serde(#[from] serde_json::Error),
+
+    #[error("Slide index {0} out of range")]
+    OutOfRange(usize),
 }

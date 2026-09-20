@@ -4,24 +4,244 @@
   <meta charset="UTF-8" />
   <title>Omashow</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-    #sidebar { width: 240px; background: #111; color: #eee; padding: 16px; }
-    #main { flex: 1; padding: 24px; }
-    button { padding: 8px 12px; margin: 4px; }
+    :root {
+      --bg: #0f1117;
+      --panel: #161a23;
+      --panel-2: #1c2130;
+      --border: #262d3d;
+      --text: #d8dee9;
+      --dim: #7b849a;
+      --accent: #7aa2f7;
+      --accent-2: #bb9af7;
+      --danger: #f7768e;
+      --green: #9ece6a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      background: var(--bg);
+      color: var(--text);
+      user-select: none;
+    }
+    /* ---------- sidebar ---------- */
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 14px;
+      gap: 10px;
+    }
+    h2 { margin: 0; font-size: 16px; letter-spacing: 0.5px; }
+    h2 span { color: var(--accent); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
+    button {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    button:hover { border-color: var(--accent); }
+    button:active { background: #232a3c; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #0f1117; font-weight: 600; }
+    button.primary:hover { background: #8fb0ff; }
+    button.danger-ghost { color: var(--danger); }
+    button.danger-ghost:hover { border-color: var(--danger); }
+    #slides {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-right: 2px;
+    }
+    .slide-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      cursor: pointer;
+      transition: border-color 0.12s;
+    }
+    .slide-row:hover { border-color: #3a445c; }
+    .slide-row.active { border-color: var(--accent); background: #202940; }
+    .slide-num {
+      font-size: 11px;
+      color: var(--dim);
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .slide-row.active .slide-num { color: var(--accent); }
+    .slide-title {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 13px;
+      padding: 3px 4px;
+      border-radius: 4px;
+      min-width: 0;
+    }
+    .slide-title:focus { background: #0f1117; box-shadow: 0 0 0 1px var(--accent); }
+    .slide-title::placeholder { color: var(--dim); }
+    .slide-del {
+      visibility: hidden;
+      border: none;
+      background: transparent;
+      color: var(--dim);
+      font-size: 14px;
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .slide-row:hover .slide-del { visibility: visible; }
+    .slide-del:hover { color: var(--danger); border-color: transparent; }
+    /* ---------- main ---------- */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #preview-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      min-height: 0;
+    }
+    #slide-canvas {
+      aspect-ratio: 16 / 9;
+      max-width: 100%;
+      max-height: 100%;
+      width: 100%;
+      background: #10131c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #slide-title-preview {
+      font-size: clamp(18px, 3.2vw, 40px);
+      font-weight: 700;
+      margin: 0;
+      padding: 7% 6% 0;
+      color: #e8ecf4;
+      outline: none;
+      border-radius: 6px;
+      min-height: 1.2em;
+      word-break: break-word;
+    }
+    #slide-title-preview:focus { box-shadow: 0 0 0 2px var(--accent); background: rgba(122,162,247,0.06); }
+    #slide-title-preview::placeholder { color: #3d465c; }
+    #slide-notes-preview {
+      margin: auto 6% 6%;
+      max-width: 82%;
+      font-size: clamp(11px, 1.3vw, 16px);
+      line-height: 1.5;
+      color: #9aa3b8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow: hidden;
+    }
+    .empty-state {
+      color: var(--dim);
+      font-size: 14px;
+      text-align: center;
+    }
+    /* ---------- notes editor ---------- */
+    #notes-bar {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      padding: 10px 16px 12px;
+    }
+    #notes-bar label {
+      font-size: 11px;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    #notes-input {
+      width: 100%;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      resize: none;
+      height: 56px;
+      outline: none;
+    }
+    #notes-input:focus { border-color: var(--accent); }
+    /* ---------- status bar ---------- */
+    #status {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      padding: 6px 16px;
+      font-size: 11px;
+      color: var(--dim);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    #status .ok { color: var(--green); }
+    #status .err { color: var(--danger); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   </style>
 </head>
 <body>
   <div id="sidebar">
-    <h2>Omashow</h2>
-    <button id="new">New</button>
-    <button id="open">Open...</button>
-    <button id="save">Save...</button>
+    <h2>Om<span>ashow</span></h2>
+    <div class="toolbar">
+      <button id="btn-new">New</button>
+      <button id="btn-open">Open</button>
+      <button id="btn-save" class="primary">Save</button>
+      <button id="btn-saveas">Save As</button>
+      <button id="btn-add">+ Slide</button>
+    </div>
     <div id="slides"></div>
   </div>
+
   <div id="main">
-    <h1>Welcome to Omashow</h1>
-    <p>Rust PowerPoint clone. Use the sidebar to open a .pptx.</p>
-    <pre id="log"></pre>
+    <div id="preview-wrap">
+      <div id="slide-canvas">
+        <div id="empty-msg" class="empty-state">
+          Open a .pptx or create a new deck to begin
+        </div>
+        <h1 id="slide-title-preview"></h1>
+        <div id="slide-notes-preview"></div>
+      </div>
+    </div>
+    <div id="notes-bar" style="display:none">
+      <label>Speaker notes</label>
+      <textarea id="notes-input" placeholder="Notes for this slide…"></textarea>
+    </div>
+    <div id="status">
+      <span id="status-path">no file</span>
+      <span id="status-msg"></span>
+    </div>
   </div>
   <script src="main.js"></script>
 </body>
