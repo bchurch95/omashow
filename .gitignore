@@ -1,0 +1,8 @@
+/target
+**/*.lock
+apps/omashow-tauri/dist
+apps/omashow-tauri/src-tauri/gen
+apps/omashow-tauri/src-tauri/target
+.DS_Store
+*.pptx
+*.pdf

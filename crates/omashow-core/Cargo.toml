@@ -1,0 +1,10 @@
+[package]
+name = "omashow-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+office-toolkit = { workspace = true, features = ["powerpoint"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "1"

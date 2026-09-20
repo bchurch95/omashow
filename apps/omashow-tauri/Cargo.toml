@@ -1,0 +1,14 @@
+[package]
+name = "omashow-tauri"
+version = "0.1.0"
+edition = "2021"
+description = "Omashow Tauri app"
+
+[dependencies]
+tauri = { workspace = true }
+omashow-core = { path = "../../crates/omashow-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[package.metadata.tauri.bundle.identifier]
+identifier = "dev.omashow.app"
