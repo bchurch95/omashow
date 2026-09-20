@@ -6,12 +6,12 @@
 - [x] Add integration test in `crates/omashow-core/tests/roundtrip.rs` asserting no-op save is byte-identical to source.
 - [x] Run `cargo clippy --workspace --all-targets -- -D warnings` and fix any compiler warnings or lint issues.
 
-## Milestone 2: Headless Slide Extraction & Inspection API
+## Milestone 2: Headless Slide Extraction & Inspection API (Complete)
 - [x] Expose slide metadata APIs in `omashow-core` (`slide_count()`, `slide_dimensions()`, `get_slide_shapes()`).
 - [x] Implement CLI inspect command: `cargo run -p omashow-cli -- inspect <path.pptx>` outputting structured JSON.
 - [x] Add test cases verifying correct text run and bounding box extraction across multi-shape slides.
 
-## Milestone 3: High-Fidelity Slide Canvas & Viewer (Formatting Preservation)
+## Milestone 3: High-Fidelity Slide Canvas & Viewer (Complete)
 - [x] Update Tauri backend commands in `apps/omashow-tauri/src-tauri/src/main.rs`:
   - `open_presentation(path)` returning metadata, slide list, and speaker notes.
   - `get_slide_content(slide_idx)` returning shapes, text runs, colors, bounding boxes, and dimensions.
@@ -43,10 +43,26 @@
 - [ ] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote.
 - [ ] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors.
 
+## Milestone 7: Presenter Stage Tools & Export Engine (PDF & Web)
+- [ ] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement.
+- [ ] Live Slide Drawing & Highlighter: Transparent SVG canvas overlay allowing in-show annotation and pen drawing over active slides.
+- [ ] Slide Grid Navigator: Hitting `G` during presentation displays a full-screen thumbnail matrix to jump directly to any slide.
+- [ ] Vector PDF Export: Implement `omashow-cli export-pdf <deck.pptx> <out.pdf>` and a Tauri "Export to PDF" dialog with 1:1 vector precision.
+- [ ] Standalone HTML5 Bundle Export: Export presentation as an offline, single-file HTML presentation viewable in any browser.
+
+## Milestone 8: Slide Transitions & Build Animations (Keynote-Grade Fluidity)
+- [ ] Slide Transitions: Implement hardware-accelerated CSS transitions between slides (Fade, Push, Slide, Wipe).
+- [ ] Magic Move / Morph: Detect shapes with matching IDs/names across consecutive slides and interpolate position, scale, and opacity smoothly.
+- [ ] Element Build Animations: Support `On Click` sequential reveals for text bullet points and shapes (Fade In, Fly In from bottom/left).
+
+## Milestone 9: Rich Media, Audio/Video & Tables
+- [ ] Embedded Audio & Video Playback: Play slide media parts (`ppt/media/*.mp4`, `.wav`) with auto-play on slide entry, looping, and pause controls.
+- [ ] Table Support (`a:tbl`): Extract, render, and format OpenXML tables with column widths, borders, cell margins, and background fills.
+- [ ] Smart Magnetic Connectors: Lines and arrows that dynamically anchor between shape boundary points and adjust when shapes move.
+
 ## Stretch Milestone: iPadOS & AirPlay External Display Support
 - [ ] Add touch navigation gestures to slide viewer (swipe left/right to advance, tap to toggle notes).
 - [ ] Configure Tauri v2 iOS/iPadOS mobile target (`cargo tauri ios`).
 - [ ] Implement secondary display routing for AirPlay / external screens via `UIScreen` / `UIWindowScene` (dedicated audience window, avoiding simple mirroring).
 - [ ] Support Split View / Slide Over multitasking with live AirPlay slide presentation.
 - [ ] Background AirPlay video stream mode allowing complete app minimization while keeping audience slides active.
-es active.
