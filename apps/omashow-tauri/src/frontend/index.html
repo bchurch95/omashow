@@ -74,7 +74,7 @@
       position: relative;
       width: 100%;
       aspect-ratio: 16 / 9;
-      background: #10131c;
+      background: #fff;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
@@ -114,33 +114,17 @@
       right: 3px;
       z-index: 2;
       visibility: hidden;
-      border: none;
-      background: rgba(15,17,23,0.85);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.92);
       color: var(--dim);
       font-size: 12px;
       border-radius: 4px;
       padding: 0 5px;
       line-height: 1.5;
+      cursor: pointer;
     }
     .slide-item:hover .slide-del { visibility: visible; }
-    .slide-del:hover { color: var(--danger); }
-    /* mini slide replicas inside the filmstrip thumbnails */
-    .mini-shape {
-      position: absolute;
-      overflow: hidden;
-      padding: 2px 3px;
-      line-height: 1.25;
-      white-space: pre-wrap;
-      word-break: break-word;
-      color: #e8ecf4;
-      pointer-events: none;
-    }
-    .mini-pic {
-      position: absolute;
-      background: rgba(122,162,247,0.10);
-      border: 1px dashed rgba(122,162,247,0.40);
-      pointer-events: none;
-    }
+    .slide-del:hover { color: var(--danger); border-color: var(--danger); }
     /* ---------- main ---------- */
     #main {
       flex: 1;
@@ -157,43 +141,40 @@
       min-height: 0;
     }
     #slide-canvas {
+      width: 100%;
       aspect-ratio: 16 / 9;
       max-width: 100%;
       max-height: 100%;
-      width: 100%;
-      background: #10131c;
+      background: #fff;
       border: 1px solid var(--border);
       border-radius: 10px;
       box-shadow: 0 18px 50px rgba(0,0,0,0.5);
       position: relative;
       overflow: hidden;
-      display: flex;
-      flex-direction: column;
     }
-    #slide-title-preview {
-      font-size: clamp(18px, 3.2vw, 40px);
-      font-weight: 700;
-      margin: 0;
-      padding: 7% 6% 0;
-      color: #e8ecf4;
-      outline: none;
-      border-radius: 6px;
-      min-height: 1.2em;
-      word-break: break-word;
-    }
-    #slide-title-preview:focus { box-shadow: 0 0 0 2px var(--accent); background: rgba(122,162,247,0.06); }
-    #slide-title-preview::placeholder { color: #3d465c; }
-    #slide-notes-preview {
-      margin: auto 6% 6%;
-      max-width: 82%;
-      font-size: clamp(11px, 1.3vw, 16px);
-      line-height: 1.5;
-      color: #9aa3b8;
+    #slide-stage { position: absolute; inset: 0; }
+    /* shapes rendered from PPTX data: EMU-proportional boxes with the
+       slide's own fills, strokes, and typography */
+    .slide-shape {
+      position: absolute;
+      overflow: hidden;
+      padding: 2px 4px;
+      line-height: 1.2;
       white-space: pre-wrap;
       word-break: break-word;
-      overflow: hidden;
+      color: #1f2430;
+    }
+    .slide-pic {
+      position: absolute;
+      background: rgba(122,162,247,0.10);
+      border: 1px dashed rgba(122,162,247,0.40);
     }
     .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: var(--dim);
       font-size: 14px;
       text-align: center;
@@ -259,11 +240,10 @@
   <div id="main">
     <div id="preview-wrap">
       <div id="slide-canvas">
+        <div id="slide-stage"></div>
         <div id="empty-msg" class="empty-state">
           Open a .pptx or create a new deck to begin
         </div>
-        <h1 id="slide-title-preview"></h1>
-        <div id="slide-notes-preview"></div>
       </div>
     </div>
     <div id="notes-bar" style="display:none">

@@ -8,8 +8,8 @@ use omashow_core::{
     get_slide_shapes, slide_count, slide_dimensions, BoundingBox, LineInfo, PptxDocument,
 };
 use office_toolkit::drawing::{
-    Color, Fill, Line, ShapeProperties, TextBody, TextParagraph, TextRun, TextRunProperties,
-    Transform2D,
+    Color, Fill, Line, ShapeProperties, TextAlign, TextBody, TextParagraph, TextParagraphProperties,
+    TextRun, TextRunProperties, Transform2D,
 };
 use office_toolkit::powerpoint::{
     AutoShape, Picture, PictureFormat, Placeholder, PlaceholderKind, Presentation, Shape,
@@ -40,7 +40,10 @@ fn title_body() -> TextBody {
             properties: TextRunProperties::new()
                 .with_fill(Fill::Solid(Color::Rgb("FF0000".to_string()))),
         });
-    TextBody::new().with_paragraph(p0).with_paragraph(p1)
+    let p2 = TextParagraph::new()
+        .with_properties(TextParagraphProperties::new().with_alignment(TextAlign::Center))
+        .with_run(TextRun::text("Centered"));
+    TextBody::new().with_paragraph(p0).with_paragraph(p1).with_paragraph(p2)
 }
 
 /// A two-slide deck: a titled slide with a text box, a picture, and a
@@ -151,8 +154,8 @@ fn assert_slide0_inspection(pres: &Presentation) {
             height_emu: 1_000_000,
         })
     );
-    assert_eq!(title.text.as_deref(), Some("Hello World\nSecond\nline"));
-    assert_eq!(title.runs.len(), 5);
+    assert_eq!(title.text.as_deref(), Some("Hello World\nSecond\nline\nCentered"));
+    assert_eq!(title.runs.len(), 6);
     assert_eq!(title.runs[0].text, "Hello ");
     assert!(title.runs[0].bold);
     assert!(!title.runs[0].italic);
@@ -170,6 +173,12 @@ fn assert_slide0_inspection(pres: &Presentation) {
     // Colors: only the last run sets one.
     assert_eq!(title.runs[0].color, None);
     assert_eq!(title.runs[4].color.as_deref(), Some("#FF0000"));
+    // Alignment: only paragraph 2 declares one.
+    assert_eq!(title.runs[0].alignment, None);
+    assert_eq!(title.runs[2].alignment, None);
+    assert_eq!(title.runs[5].text, "Centered");
+    assert_eq!(title.runs[5].paragraph, 2);
+    assert_eq!(title.runs[5].alignment.as_deref(), Some("center"));
 
     // Text box.
     let box_shape = &shapes[1];
@@ -294,11 +303,11 @@ fn slide_shapes_serialize_to_json() {
     let title = &shapes[0];
     assert_eq!(title["kind"], "autoshape");
     assert_eq!(title["placeholder"], "title");
-    assert_eq!(title["text"], "Hello World\nSecond\nline");
+    assert_eq!(title["text"], "Hello World\nSecond\nline\nCentered");
     assert_eq!(title["bounds"]["x_emu"], 1_000_000);
     assert_eq!(title["bounds"]["height_emu"], 1_000_000);
     let runs = title["runs"].as_array().unwrap();
-    assert_eq!(runs.len(), 5);
+    assert_eq!(runs.len(), 6);
     assert_eq!(runs[0]["paragraph"], 0);
     assert_eq!(runs[0]["text"], "Hello ");
     assert_eq!(runs[0]["bold"], true);
@@ -314,6 +323,10 @@ fn slide_shapes_serialize_to_json() {
     assert_eq!(runs[4]["text"], "line");
     assert!(runs[0]["color"].is_null());
     assert_eq!(runs[4]["color"], "#FF0000");
+    assert!(runs[0]["alignment"].is_null());
+    assert_eq!(runs[5]["text"], "Centered");
+    assert_eq!(runs[5]["paragraph"], 2);
+    assert_eq!(runs[5]["alignment"], "center");
 
     // Text box: bounds and text.
     let box_shape = &shapes[1];

@@ -7,7 +7,9 @@
 
 use serde::Serialize;
 
-use office_toolkit::drawing::{Color, Fill, Line, TextBody, TextRun, TextRunProperties};
+use office_toolkit::drawing::{
+    Color, Fill, Line, TextAlign, TextBody, TextRun, TextRunProperties,
+};
 use office_toolkit::powerpoint::{EMU_PER_INCH, PlaceholderKind, Presentation, Shape, ShapeGroup};
 
 use crate::error::Error;
@@ -68,6 +70,9 @@ pub struct TextRunInfo {
     /// Text color as a CSS value (see [`color_to_css`]); `None` when the run
     /// inherits its color from the paragraph/shape defaults.
     pub color: Option<String>,
+    /// Paragraph alignment as a CSS value (`"left"`, `"center"`, `"right"`,
+    /// `"justify"`); `None` when the paragraph inherits the default (left).
+    pub alignment: Option<String>,
 }
 
 /// A shape's outline stroke.
@@ -384,6 +389,11 @@ fn flatten_runs(tb: &TextBody) -> Vec<TextRunInfo> {
     let default_props = TextRunProperties::new();
     let mut runs = Vec::new();
     for (para_idx, para) in tb.paragraphs.iter().enumerate() {
+        let alignment = para
+            .properties
+            .as_ref()
+            .and_then(|p| p.alignment)
+            .map(alignment_to_css);
         for run in &para.runs {
             let (text, properties) = match run {
                 TextRun::Regular { text, properties } => (text.as_str(), properties),
@@ -392,13 +402,18 @@ fn flatten_runs(tb: &TextBody) -> Vec<TextRunInfo> {
                 }
                 TextRun::Field { cached_text, properties, .. } => (cached_text.as_str(), properties),
             };
-            runs.push(run_info(para_idx, text, properties));
+            runs.push(run_info(para_idx, alignment.clone(), text, properties));
         }
     }
     runs
 }
 
-fn run_info(paragraph: usize, text: &str, p: &TextRunProperties) -> TextRunInfo {
+fn run_info(
+    paragraph: usize,
+    alignment: Option<String>,
+    text: &str,
+    p: &TextRunProperties,
+) -> TextRunInfo {
     TextRunInfo {
         paragraph,
         text: text.to_string(),
@@ -407,6 +422,19 @@ fn run_info(paragraph: usize, text: &str, p: &TextRunProperties) -> TextRunInfo 
         font_size_pt: p.font_size_100ths_point.map(|sz| sz as f64 / 100.0),
         font_family: p.font_family.clone(),
         color: p.fill.as_ref().map(fill_to_css),
+        alignment,
+    }
+}
+
+/// Render a paragraph alignment as the matching CSS `text-align` value.
+fn alignment_to_css(alignment: TextAlign) -> String {
+    match alignment {
+        TextAlign::Left => "left".to_string(),
+        TextAlign::Center => "center".to_string(),
+        TextAlign::Right => "right".to_string(),
+        TextAlign::Justified | TextAlign::JustifiedLow | TextAlign::Distributed | TextAlign::ThaiDistributed => {
+            "justify".to_string()
+        }
     }
 }
 
@@ -498,6 +526,17 @@ mod tests {
         );
         // Preset names pass through (already CSS-like).
         assert_eq!(color_to_css(&Color::Preset("tomato".to_string())), "tomato");
+    }
+
+    #[test]
+    fn alignment_to_css_maps_all_variants() {
+        assert_eq!(alignment_to_css(TextAlign::Left), "left");
+        assert_eq!(alignment_to_css(TextAlign::Center), "center");
+        assert_eq!(alignment_to_css(TextAlign::Right), "right");
+        assert_eq!(alignment_to_css(TextAlign::Justified), "justify");
+        assert_eq!(alignment_to_css(TextAlign::JustifiedLow), "justify");
+        assert_eq!(alignment_to_css(TextAlign::Distributed), "justify");
+        assert_eq!(alignment_to_css(TextAlign::ThaiDistributed), "justify");
     }
 
     #[test]

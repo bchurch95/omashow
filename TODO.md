@@ -17,7 +17,7 @@
   - `get_slide_content(slide_idx)` returning shapes, text runs, colors, bounding boxes, and dimensions.
   - `save_presentation(path)`.
 - [x] Implement thumbnail filmstrip sidebar in the Tauri frontend with slide numbers and active indicator.
-- [ ] Build high-fidelity slide canvas preserving typography (fonts, sizes in pt, bold/italic, alignment) and proportional EMU bounding boxes.
+- [x] Build high-fidelity slide canvas preserving typography (fonts, sizes in pt, bold/italic, alignment) and proportional EMU bounding boxes.
 - [ ] Run visual audit with `python3 visual_critic.py` and refine CSS/layout aesthetics until Qwen Vision scores the interface 8/10 or higher.
 
 ## Milestone 4: Dual-Screen Presenter Mode & Multitasking
