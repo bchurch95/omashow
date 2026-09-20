@@ -18,8 +18,21 @@
   - `save_presentation(path)`.
 - [ ] Implement thumbnail filmstrip sidebar in the Tauri frontend.
 - [ ] Build slide canvas component rendering basic shapes, text boxes, and background styling.
+- [ ] Run visual audit with `python3 visual_critic.py` and refine CSS/layout aesthetics until Qwen Vision scores the interface 8/10 or higher.
 
 ## Milestone 4: Slide Editing & Mutation Operations (Phase 3)
 - [ ] Add `update_text_run(slide_idx, shape_id, new_text)` in `omashow-core`.
 - [ ] Add `add_blank_slide(index)` and `delete_slide(index)`.
 - [ ] Connect Tauri frontend text editing events to core mutation commands.
+
+## Milestone 5: Presenter Mode, Undo History & Filmstrip Reordering
+- [ ] Add `UndoStack` command pattern for all slide and text mutations.
+- [ ] Implement slide reordering API (`reorder_slide(from_idx, to_idx)`) in core and Tauri backend.
+- [ ] Implement drag-and-drop or move up/down controls in the thumbnail filmstrip.
+- [ ] Build Full-Screen Slideshow mode in Tauri (`F5` / `Escape`) with arrow key navigation and black screen toggle (`B`).
+
+## Milestone 6: Image Extraction & Multi-Vendor Corpus Testing
+- [ ] Support `<p:pic>` shape extraction and map embedded media relationships (`ppt/media/*`).
+- [ ] Render embedded slide pictures inside the Tauri slide canvas.
+- [ ] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote.
+- [ ] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors.
