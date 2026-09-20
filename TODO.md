@@ -1,10 +1,10 @@
 # Omashow Development Backlog
 
-## Milestone 1: Robust Lossless PPTX Roundtripping (In Progress)
+## Milestone 1: Robust Lossless PPTX Roundtripping (Complete)
 - [x] Run and verify `crates/omashow-core/examples/verify_real.rs` against real `python-pptx` decks (`/tmp/omashow-rt/real.pptx`).
 - [x] Ensure non-writer-modified OPC package parts (media, audio, video, embedded fonts, unknown XML relations) are preserved.
 - [x] Add integration test in `crates/omashow-core/tests/roundtrip.rs` asserting no-op save is byte-identical to source.
-- [ ] Run `cargo clippy --workspace --all-targets -- -D warnings` and fix any compiler warnings or lint issues.
+- [x] Run `cargo clippy --workspace --all-targets -- -D warnings` and fix any compiler warnings or lint issues.
 
 ## Milestone 2: Headless Slide Extraction & Inspection API
 - [ ] Expose slide metadata APIs in `omashow-core` (`slide_count()`, `slide_dimensions()`, `get_slide_shapes()`).

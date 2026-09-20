@@ -39,6 +39,12 @@ pub struct PptxDocument {
     dirty: bool,
 }
 
+impl Default for PptxDocument {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PptxDocument {
     /// Creates a fresh, empty document (no slides).
     pub fn new() -> Self {
