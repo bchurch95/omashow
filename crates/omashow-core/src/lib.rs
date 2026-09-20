@@ -13,8 +13,8 @@ pub mod inspect;
 pub use document::PptxDocument;
 pub use error::Error;
 pub use inspect::{
-    get_slide_shapes, slide_count, slide_dimensions, BoundingBox, ShapeInfo, SlideDimensions,
-    TextRunInfo,
+    get_slide_shapes, slide_count, slide_dimensions, BoundingBox, LineInfo, ShapeInfo,
+    SlideDimensions, TextRunInfo,
 };
 pub use model::{PresentationModel, SlideModel};
 pub use office_toolkit::powerpoint::Presentation;

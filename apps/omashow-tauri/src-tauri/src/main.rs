@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
-use omashow_core::PptxDocument;
+use omashow_core::{model_of, PptxDocument, SlideDimensions};
+use serde::Serialize;
 
 /// The in-memory deck — the single source of truth. `PptxDocument` holds both the
 /// editable model and the original file's parts, so saving after edits stays lossless.
@@ -19,8 +20,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             new_presentation,
             open_pptx,
+            open_presentation,
             save_pptx,
             save_as,
+            save_presentation,
+            get_slide_content,
             set_title,
             set_notes,
             add_slide,
@@ -34,6 +38,49 @@ fn main() {
 
 fn project(doc: &PptxDocument) -> Result<String, String> {
     serde_json::to_string(&omashow_core::model_of(&doc.pres)).map_err(|e| e.to_string())
+}
+
+/// Deck overview returned by `open_presentation`: metadata, the slide list,
+/// and speaker notes (no shapes — those come per-slide via `get_slide_content`).
+#[derive(Serialize)]
+struct PresentationSummary {
+    title: String,
+    slide_count: usize,
+    slide_dimensions: SlideDimensions,
+    slides: Vec<SlideSummary>,
+}
+
+#[derive(Serialize)]
+struct SlideSummary {
+    index: usize,
+    title: Option<String>,
+    notes: Option<String>,
+}
+
+/// Full content of one slide for the canvas: shapes (with runs, colors,
+/// bounding boxes) plus the slide dimensions for EMU-to-pixel scaling.
+#[derive(Serialize)]
+struct SlideContent {
+    index: usize,
+    slide_dimensions: SlideDimensions,
+    shapes: Vec<omashow_core::ShapeInfo>,
+}
+
+fn summary(doc: &PptxDocument) -> PresentationSummary {
+    let model = model_of(&doc.pres);
+    let slides = (0..doc.slide_count())
+        .map(|i| SlideSummary {
+            index: i,
+            title: model.slides[i].title.clone(),
+            notes: model.slides[i].notes.clone(),
+        })
+        .collect();
+    PresentationSummary {
+        title: model.title,
+        slide_count: doc.slide_count(),
+        slide_dimensions: doc.slide_dimensions(),
+        slides,
+    }
 }
 
 #[tauri::command]
@@ -51,6 +98,40 @@ fn open_pptx(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, Stri
     deck.doc = Some(doc);
     deck.path = Some(path);
     project(deck.doc.as_ref().unwrap())
+}
+
+#[tauri::command]
+fn open_presentation(
+    path: String,
+    state: State<'_, Mutex<Deck>>,
+) -> Result<PresentationSummary, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = PptxDocument::open(&path).map_err(|e| e.to_string())?;
+    let out = summary(&doc);
+    deck.doc = Some(doc);
+    deck.path = Some(path);
+    Ok(out)
+}
+
+#[tauri::command]
+fn get_slide_content(slide: usize, state: State<'_, Mutex<Deck>>) -> Result<SlideContent, String> {
+    let deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
+    let shapes = doc.get_slide_shapes(slide).map_err(|e| e.to_string())?;
+    Ok(SlideContent {
+        index: slide,
+        slide_dimensions: doc.slide_dimensions(),
+        shapes,
+    })
+}
+
+#[tauri::command]
+fn save_presentation(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
+    doc.save(&path).map_err(|e| e.to_string())?;
+    deck.path = Some(path.clone());
+    Ok(path)
 }
 
 #[tauri::command]

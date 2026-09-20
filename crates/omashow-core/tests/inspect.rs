@@ -4,9 +4,12 @@
 
 use std::io::Cursor;
 
-use omashow_core::{get_slide_shapes, slide_count, slide_dimensions, BoundingBox, PptxDocument};
+use omashow_core::{
+    get_slide_shapes, slide_count, slide_dimensions, BoundingBox, LineInfo, PptxDocument,
+};
 use office_toolkit::drawing::{
-    ShapeProperties, TextBody, TextParagraph, TextRun, TextRunProperties, Transform2D,
+    Color, Fill, Line, ShapeProperties, TextBody, TextParagraph, TextRun, TextRunProperties,
+    Transform2D,
 };
 use office_toolkit::powerpoint::{
     AutoShape, Picture, PictureFormat, Placeholder, PlaceholderKind, Presentation, Shape,
@@ -34,7 +37,8 @@ fn title_body() -> TextBody {
         .with_run(TextRun::LineBreak { properties: None })
         .with_run(TextRun::Regular {
             text: "line".to_string(),
-            properties: TextRunProperties::new(),
+            properties: TextRunProperties::new()
+                .with_fill(Fill::Solid(Color::Rgb("FF0000".to_string()))),
         });
     TextBody::new().with_paragraph(p0).with_paragraph(p1)
 }
@@ -58,9 +62,14 @@ fn fixture_deck() -> Presentation {
     let box_shape = AutoShape::new(3, "Box")
         .with_text_box(true)
         .with_properties(
-            ShapeProperties::new().with_transform(
-                Transform2D::new().with_offset(500, 300).with_extent(200, 100),
-            ),
+            ShapeProperties::new()
+                .with_transform(Transform2D::new().with_offset(500, 300).with_extent(200, 100))
+                .with_fill(Fill::Solid(Color::Rgb("00FF00".to_string())))
+                .with_line(
+                    Line::new()
+                        .with_width_emu(12700)
+                        .with_fill(Fill::Solid(Color::Rgb("0000FF".to_string()))),
+                ),
         )
         .with_text_body(TextBody::new().with_paragraph(TextParagraph::new().with_run(
             TextRun::text("Box"),
@@ -74,7 +83,12 @@ fn fixture_deck() -> Presentation {
         1_000_000,
         2_000_000,
     )
-    .with_offset(10_000_000, 5_000_000);
+    .with_offset(10_000_000, 5_000_000)
+    .with_shape_properties(
+        ShapeProperties::new().with_line(
+            Line::new().with_width_emu(25400).with_fill(Fill::Solid(Color::Rgb("000000".to_string()))),
+        ),
+    );
 
     let child = AutoShape::new(5, "Child").with_properties(
         ShapeProperties::new().with_transform(
@@ -153,6 +167,9 @@ fn assert_slide0_inspection(pres: &Presentation) {
     assert_eq!(title.runs[3].text, "\n");
     assert_eq!(title.runs[3].paragraph, 1);
     assert_eq!(title.runs[4].text, "line");
+    // Colors: only the last run sets one.
+    assert_eq!(title.runs[0].color, None);
+    assert_eq!(title.runs[4].color.as_deref(), Some("#FF0000"));
 
     // Text box.
     let box_shape = &shapes[1];
@@ -169,6 +186,14 @@ fn assert_slide0_inspection(pres: &Presentation) {
     );
     assert_eq!(box_shape.text.as_deref(), Some("Box"));
     assert_eq!(box_shape.runs.len(), 1);
+    assert_eq!(box_shape.fill.as_deref(), Some("#00FF00"));
+    assert_eq!(
+        box_shape.line.as_ref(),
+        Some(&LineInfo {
+            width_emu: Some(12_700),
+            color: Some("#0000FF".to_string()),
+        })
+    );
 
     // Picture.
     let pic = &shapes[2];
@@ -183,6 +208,14 @@ fn assert_slide0_inspection(pres: &Presentation) {
         })
     );
     assert_eq!(pic.text, None);
+    assert_eq!(pic.fill, None);
+    assert_eq!(
+        pic.line.as_ref(),
+        Some(&LineInfo {
+            width_emu: Some(25_400),
+            color: Some("#000000".to_string()),
+        })
+    );
 
     // Group: own bounds, plus the child remapped 2× out of its 1000×500 space.
     let group = &shapes[3];
@@ -279,6 +312,8 @@ fn slide_shapes_serialize_to_json() {
     assert_eq!(runs[3]["text"], "\n");
     assert_eq!(runs[3]["paragraph"], 1);
     assert_eq!(runs[4]["text"], "line");
+    assert!(runs[0]["color"].is_null());
+    assert_eq!(runs[4]["color"], "#FF0000");
 
     // Text box: bounds and text.
     let box_shape = &shapes[1];
@@ -288,6 +323,9 @@ fn slide_shapes_serialize_to_json() {
     assert_eq!(box_shape["bounds"]["width_emu"], 200);
     assert_eq!(box_shape["bounds"]["height_emu"], 100);
     assert_eq!(box_shape["runs"][0]["text"], "Box");
+    assert_eq!(box_shape["fill"], "#00FF00");
+    assert_eq!(box_shape["line"]["width_emu"], 12_700);
+    assert_eq!(box_shape["line"]["color"], "#0000FF");
 
     // Picture: exact bounds, no text.
     let pic = &shapes[2];
@@ -298,6 +336,9 @@ fn slide_shapes_serialize_to_json() {
     assert_eq!(pic["bounds"]["height_emu"], 2_000_000);
     assert!(pic["text"].is_null());
     assert!(pic["runs"].as_array().unwrap().is_empty());
+    assert!(pic["fill"].is_null());
+    assert_eq!(pic["line"]["width_emu"], 25_400);
+    assert_eq!(pic["line"]["color"], "#000000");
 
     // Group: own bounds, child remapped 2× out of its 1000×500 space.
     let group = &shapes[3];

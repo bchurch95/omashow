@@ -7,7 +7,7 @@
 
 use serde::Serialize;
 
-use office_toolkit::drawing::{TextBody, TextRun, TextRunProperties};
+use office_toolkit::drawing::{Color, Fill, Line, TextBody, TextRun, TextRunProperties};
 use office_toolkit::powerpoint::{EMU_PER_INCH, PlaceholderKind, Presentation, Shape, ShapeGroup};
 
 use crate::error::Error;
@@ -65,6 +65,18 @@ pub struct TextRunInfo {
     /// `sz` in points (e.g. `18.0`); `None` when the run inherits its size.
     pub font_size_pt: Option<f64>,
     pub font_family: Option<String>,
+    /// Text color as a CSS value (see [`color_to_css`]); `None` when the run
+    /// inherits its color from the paragraph/shape defaults.
+    pub color: Option<String>,
+}
+
+/// A shape's outline stroke.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LineInfo {
+    /// Stroke width in EMUs; `None` when the shape uses the default width.
+    pub width_emu: Option<i64>,
+    /// Stroke color as a CSS value; `None` when the shape has no explicit line.
+    pub color: Option<String>,
 }
 
 /// Serializable view of one shape. For a group, `children` holds the nested
@@ -85,6 +97,12 @@ pub struct ShapeInfo {
     /// The shape's full text, paragraphs joined by `\n`; `None` when the
     /// shape carries no text body.
     pub text: Option<String>,
+    /// Interior fill as a CSS color (solid fills) or a token ("none",
+    /// "gradient", "pattern", "image"); `None` when the shape inherits its
+    /// fill from the theme/layout.
+    pub fill: Option<String>,
+    /// Outline stroke, when the shape declares one.
+    pub line: Option<LineInfo>,
     /// Text runs in document order.
     pub runs: Vec<TextRunInfo>,
     /// Nested shapes, only for a group.
@@ -215,6 +233,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                     _ => None,
                 }),
             text: a.text_body.as_ref().map(text_body_to_string),
+            fill: a.properties.fill.as_ref().map(fill_to_css),
+            line: a.properties.line.as_ref().map(line_info),
             runs: a
                 .text_body
                 .as_ref()
@@ -234,6 +254,16 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 p.extent_emu.1,
             )),
             text: None,
+            fill: p
+                .shape_properties
+                .as_ref()
+                .and_then(|sp| sp.fill.as_ref())
+                .map(fill_to_css),
+            line: p
+                .shape_properties
+                .as_ref()
+                .and_then(|sp| sp.line.as_ref())
+                .map(line_info),
             runs: Vec::new(),
             children: None,
         },
@@ -249,6 +279,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 c.extent_emu.1,
             )),
             text: None,
+            fill: None,
+            line: None,
             runs: Vec::new(),
             children: None,
         },
@@ -270,6 +302,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                     g.extent_emu.1,
                 )),
                 text: None,
+                fill: None,
+                line: None,
                 runs: Vec::new(),
                 children: Some(children),
             }
@@ -288,6 +322,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                     _ => None,
                 }),
             text: None,
+            fill: c.properties.fill.as_ref().map(fill_to_css),
+            line: c.properties.line.as_ref().map(line_info),
             runs: Vec::new(),
             children: None,
         },
@@ -303,6 +339,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 t.extent_emu.1,
             )),
             text: None,
+            fill: None,
+            line: None,
             runs: Vec::new(),
             children: None,
         },
@@ -318,6 +356,8 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 m.extent_emu.1,
             )),
             text: None,
+            fill: None,
+            line: None,
             runs: Vec::new(),
             children: None,
         },
@@ -366,5 +406,107 @@ fn run_info(paragraph: usize, text: &str, p: &TextRunProperties) -> TextRunInfo 
         italic: p.italic,
         font_size_pt: p.font_size_100ths_point.map(|sz| sz as f64 / 100.0),
         font_family: p.font_family.clone(),
+        color: p.fill.as_ref().map(fill_to_css),
+    }
+}
+
+/// Render an OpenXML color as a CSS value the frontend can use directly.
+fn color_to_css(color: &Color) -> String {
+    match color {
+        Color::Rgb(hex) => format!("#{hex}"),
+        Color::RgbPercent { red, green, blue } => {
+            let to_byte = |v: i64| (v.clamp(0, 100_000) * 255 + 50_000) / 100_000;
+            format!("#{:02x}{:02x}{:02x}", to_byte(*red), to_byte(*green), to_byte(*blue))
+        }
+        Color::Hsl { hue_60000ths, saturation_1000ths_percent, luminance_1000ths_percent } => {
+            format!(
+                "hsl({}, {}%, {}%)",
+                hue_60000ths / 60_000,
+                saturation_1000ths_percent / 1_000,
+                luminance_1000ths_percent / 1_000
+            )
+        }
+        Color::System { value, last_color } => last_color
+            .as_deref()
+            .map(|c| format!("#{c}"))
+            .unwrap_or_else(|| value.clone()),
+        Color::Preset(name) => name.clone(),
+    }
+}
+
+/// Render a fill as a CSS color for solid fills; non-solid fills degrade to a
+/// short token the renderer can branch on ("none", "gradient", "pattern",
+/// "image").
+fn fill_to_css(fill: &Fill) -> String {
+    match fill {
+        Fill::None => "none".to_string(),
+        Fill::Solid(color) => color_to_css(color),
+        Fill::Gradient(_) => "gradient".to_string(),
+        Fill::Pattern(_) => "pattern".to_string(),
+        Fill::Image(_) => "image".to_string(),
+    }
+}
+
+fn line_info(line: &Line) -> LineInfo {
+    LineInfo {
+        width_emu: line.width_emu,
+        color: line.fill.as_ref().map(fill_to_css),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_to_css_covers_all_variants() {
+        assert_eq!(
+            color_to_css(&Color::Rgb("1A2B3C".to_string())),
+            "#1A2B3C"
+        );
+        // 100000 = 100% -> 255 -> ff; 0 -> 00.
+        assert_eq!(
+            color_to_css(&Color::RgbPercent {
+                red: 100_000,
+                green: 0,
+                blue: 0
+            }),
+            "#ff0000"
+        );
+        assert_eq!(
+            color_to_css(&Color::Hsl {
+                hue_60000ths: 120_000, // 2 degrees
+                saturation_1000ths_percent: 50_000,
+                luminance_1000ths_percent: 25_000,
+            }),
+            "hsl(2, 50%, 25%)"
+        );
+        // System color prefers the authoring-time RGB fallback.
+        assert_eq!(
+            color_to_css(&Color::System {
+                value: "windowText".to_string(),
+                last_color: Some("000000".to_string()),
+            }),
+            "#000000"
+        );
+        assert_eq!(
+            color_to_css(&Color::System {
+                value: "btnFace".to_string(),
+                last_color: None,
+            }),
+            "btnFace"
+        );
+        // Preset names pass through (already CSS-like).
+        assert_eq!(color_to_css(&Color::Preset("tomato".to_string())), "tomato");
+    }
+
+    #[test]
+    fn fill_to_css_degrades_non_solid_fills_to_tokens() {
+        assert_eq!(fill_to_css(&Fill::None), "none");
+        assert_eq!(
+            fill_to_css(&Fill::Solid(Color::Rgb("00FF00".to_string()))),
+            "#00FF00"
+        );
+        assert_eq!(fill_to_css(&Fill::Gradient(Default::default())), "gradient");
     }
 }

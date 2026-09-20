@@ -12,7 +12,7 @@
 - [x] Add test cases verifying correct text run and bounding box extraction across multi-shape slides.
 
 ## Milestone 3: High-Fidelity Slide Canvas & Viewer (Formatting Preservation)
-- [ ] Update Tauri backend commands in `apps/omashow-tauri/src-tauri/src/main.rs`:
+- [x] Update Tauri backend commands in `apps/omashow-tauri/src-tauri/src/main.rs`:
   - `open_presentation(path)` returning metadata, slide list, and speaker notes.
   - `get_slide_content(slide_idx)` returning shapes, text runs, colors, bounding boxes, and dimensions.
   - `save_presentation(path)`.
