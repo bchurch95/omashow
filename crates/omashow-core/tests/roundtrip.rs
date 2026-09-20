@@ -124,17 +124,19 @@ fn picture_survives_roundtrip() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Parts the model doesn't understand (themes, custom XML, legacy content) must be carried
-/// through untouched — this is what makes a real .pptx round-trip lossless.
+/// Parts the model doesn't understand (custom XML, unused layouts, media the model can't
+/// parse, the thumbnail, ...) must be carried through untouched — this is what makes a real
+/// .pptx round-trip lossless.
 ///
-/// KNOWN GAP (office-toolkit 1.0): this currently FAILS. Round-tripping a real 46-part deck
-/// drops ~22 parts (10 of 11 slide layouts, the thumbnail, printer settings, custom parts) and
-/// re-serializes 21 others. office-toolkit 1.0 is model-preserving, not lossless. Ignored until
-/// we add surgical part-preservation to the io layer (keep original bytes for parts the model
-/// doesn't regenerate). See the round-trip verification notes.
-#[ignore = "office-toolkit 1.0 is not lossless for real decks; needs surgical part preservation"]
+/// Two cases:
+/// 1. An *unmodified* save must be byte-for-byte identical to the input (true no-op losslessness).
+/// 2. An *edited* save must still preserve every original part the writer doesn't re-emit,
+///    while applying the edit.
 #[test]
-fn unknown_parts_survive_roundtrip() {
+fn lossless_merge_preserves_unknown_parts() {
+    use std::io::{Cursor, Write};
+    use opc_ooxml::{Part, Package};
+
     let dir = std::env::temp_dir().join("omashow_parts");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("x.pptx").to_string_lossy().to_string();
@@ -144,48 +146,63 @@ fn unknown_parts_survive_roundtrip() {
     ));
     save_presentation(&path, &Presentation::new().with_slide(slide)).unwrap();
 
-    // Inject a custom part the deck doesn't know about, with a registered content type
-    // (as every real PowerPoint part has) — simulates an unknown theme/legacy part.
-    let py = r#"
-import zipfile, shutil, sys
-p = sys.argv[1]; tmp = p + ".tmp"
-with zipfile.ZipFile(p) as zin, zipfile.ZipFile(tmp, "w") as zout:
-    for it in zin.infolist():
-        data = zin.read(it.filename)
-        if it.filename == "[Content_Types].xml":
-            data = data.replace(
-                b"</Types>",
-                b'<Override PartName="/custom/branding.xml" ContentType="application/vnd.omashow.branding+xml"/></Types>',
-            )
-        zout.writestr(it, data)
-    zout.writestr("custom/branding.xml", "<branding>omarchy</branding>")
-shutil.move(tmp, p)
-"#;
-    let status = std::process::Command::new("python3")
-        .arg("-c")
-        .arg(py)
-        .arg(&path)
-        .status()
-        .expect("python3 should be available");
-    assert!(status.success(), "failed to inject custom part");
+    // Inject three parts the deck doesn't model, each with a registered content type (as every
+    // real PowerPoint part has): a custom-XML part, an extra slide layout, and an audio media
+    // part the model can't parse. This simulates a real deck carrying content office-toolkit
+    // 1.0's writer would otherwise drop.
+    {
+        let bytes = std::fs::read(&path).unwrap();
+        let mut pkg = Package::read_from(Cursor::new(&bytes)).unwrap();
+        pkg.add_part(Part::new(
+            "/custom/branding.xml",
+            "application/vnd.omashow.branding+xml",
+            b"<branding>omarchy</branding>".to_vec(),
+        ));
+        pkg.add_part(Part::new(
+            "/ppt/slideLayouts/slideLayout2.xml",
+            "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml",
+            b"<p:sldLayout xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" \
+             xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><p:cSld name=\"Extra\"/></p:sldLayout>"
+                .to_vec(),
+        ));
+        pkg.add_part(Part::new("/ppt/media/sound1.wav", "audio/wav", vec![0x52, 0x49, 0x46, 0x46]));
+        let mut out = std::fs::File::create(&path).unwrap();
+        out.write_all(pkg.write_to(Cursor::new(Vec::new())).unwrap().get_ref()).unwrap();
+    }
 
-    // Round-trip through Omashow.
-    let pres = open_pptx_full(&path).unwrap();
-    save_presentation(&path, &pres).unwrap();
+    let before = std::fs::read(&path).unwrap();
 
-    let has = std::process::Command::new("python3")
-        .arg("-c")
-        .arg(format!(
-            "import zipfile,sys; z=zipfile.ZipFile('{}'); sys.exit(0 if 'custom/branding.xml' in z.namelist() else 1)",
-            path
-        ))
-        .status()
-        .unwrap();
-    assert!(has.success(), "custom part lost — round-trip is NOT lossless");
+    // Case 1: unmodified save is byte-for-byte identical.
+    let doc = PptxDocument::open(&path).unwrap();
+    let noop = dir.join("noop.pptx");
+    doc.save(&noop).unwrap();
+    assert_eq!(std::fs::read(&noop).unwrap(), before, "unmodified save must be byte-identical");
 
-    // And the title is intact.
-    let pres2 = open_pptx_full(&path).unwrap();
-    assert_eq!(model_of(&pres2).slides[0].title.as_deref(), Some("Theme test"));
+    // Case 2: edited save preserves the unknown parts AND applies the edit.
+    let mut doc = PptxDocument::open(&path).unwrap();
+    doc.set_title(0, "Edited Title").unwrap();
+    let edited = dir.join("edited.pptx");
+    doc.save(&edited).unwrap();
+
+    // Reading the edited file back also verifies every part has a resolvable content
+    // type (Package::read_from rejects a part without one).
+    let edited_bytes = std::fs::read(&edited).unwrap();
+    let pkg = Package::read_from(Cursor::new(&edited_bytes)).unwrap();
+    let branding = pkg.part("/custom/branding.xml").expect("custom part lost on save");
+    assert_eq!(branding.content_type, "application/vnd.omashow.branding+xml");
+    assert_eq!(branding.data, b"<branding>omarchy</branding>");
+    assert!(
+        pkg.part("/ppt/slideLayouts/slideLayout2.xml").is_some(),
+        "extra slide layout lost on save"
+    );
+    assert!(
+        pkg.part("/ppt/media/sound1.wav").is_some(),
+        "unmodeled media part lost on save"
+    );
+
+    // And the edit landed.
+    let pres2 = open_pptx_full(edited.to_str().unwrap()).unwrap();
+    assert_eq!(model_of(&pres2).slides[0].title.as_deref(), Some("Edited Title"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

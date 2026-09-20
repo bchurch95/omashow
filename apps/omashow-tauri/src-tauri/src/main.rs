@@ -1,14 +1,14 @@
 use std::sync::Mutex;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
-use omashow_core::Presentation;
+use omashow_core::PptxDocument;
 
-/// The full in-memory deck — the single source of truth. The frontend only ever
-/// sees a lightweight JSON projection of it; every edit lands on the real
-/// `Presentation` so nothing (pictures, charts, body text) is lost on save.
+/// The in-memory deck — the single source of truth. `PptxDocument` holds both the
+/// editable model and the original file's parts, so saving after edits stays lossless.
+/// The frontend only ever sees a lightweight JSON projection of the model.
 #[derive(Default)]
 struct Deck {
-    pres: Option<Presentation>,
+    doc: Option<PptxDocument>,
     path: Option<String>,
 }
 
@@ -32,41 +32,41 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-fn project(pres: &Presentation) -> Result<String, String> {
-    serde_json::to_string(&omashow_core::model_of(pres)).map_err(|e| e.to_string())
+fn project(doc: &PptxDocument) -> Result<String, String> {
+    serde_json::to_string(&omashow_core::model_of(&doc.pres)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn new_presentation(state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    deck.pres = Some(omashow_core::new_presentation());
+    deck.doc = Some(PptxDocument::new());
     deck.path = None;
-    project(deck.pres.as_ref().unwrap())
+    project(deck.doc.as_ref().unwrap())
 }
 
 #[tauri::command]
 fn open_pptx(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = omashow_core::open_pptx_full(&path).map_err(|e| e.to_string())?;
-    deck.pres = Some(pres);
+    let doc = PptxDocument::open(&path).map_err(|e| e.to_string())?;
+    deck.doc = Some(doc);
     deck.path = Some(path);
-    project(deck.pres.as_ref().unwrap())
+    project(deck.doc.as_ref().unwrap())
 }
 
 #[tauri::command]
 fn save_pptx(state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_ref().ok_or("no presentation open")?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
     let path = deck.path.as_ref().ok_or("no file path set — use save_as")?;
-    omashow_core::save_presentation(path, pres).map_err(|e| e.to_string())?;
+    doc.save(path).map_err(|e| e.to_string())?;
     Ok(path.clone())
 }
 
 #[tauri::command]
 fn save_as(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_ref().ok_or("no presentation open")?;
-    omashow_core::save_presentation(&path, pres).map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
+    doc.save(&path).map_err(|e| e.to_string())?;
     deck.path = Some(path.clone());
     Ok(path)
 }
@@ -74,33 +74,33 @@ fn save_as(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String
 #[tauri::command]
 fn set_title(slide: usize, title: String, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_mut().ok_or("no presentation open")?;
-    omashow_core::set_slide_title(pres, slide, &title).map_err(|e| e.to_string())?;
-    project(pres)
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.set_title(slide, &title).map_err(|e| e.to_string())?;
+    project(doc)
 }
 
 #[tauri::command]
 fn set_notes(slide: usize, notes: Option<String>, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_mut().ok_or("no presentation open")?;
-    omashow_core::set_slide_notes(pres, slide, notes).map_err(|e| e.to_string())?;
-    project(pres)
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.set_notes(slide, notes).map_err(|e| e.to_string())?;
+    project(doc)
 }
 
 #[tauri::command]
 fn add_slide(title: Option<String>, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_mut().ok_or("no presentation open")?;
-    omashow_core::add_slide(pres, title).map_err(|e| e.to_string())?;
-    project(pres)
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.add_slide(title).map_err(|e| e.to_string())?;
+    project(doc)
 }
 
 #[tauri::command]
 fn delete_slide(slide: usize, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
     let mut deck = state.lock().map_err(|e| e.to_string())?;
-    let pres = deck.pres.as_mut().ok_or("no presentation open")?;
-    omashow_core::delete_slide(pres, slide).map_err(|e| e.to_string())?;
-    project(pres)
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.delete_slide(slide).map_err(|e| e.to_string())?;
+    project(doc)
 }
 
 #[tauri::command]

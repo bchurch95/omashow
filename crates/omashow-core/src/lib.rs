@@ -7,7 +7,9 @@ use model::text_body_from_string;
 pub mod error;
 pub mod model;
 pub mod io;
+pub mod document;
 
+pub use document::PptxDocument;
 pub use error::Error;
 pub use model::{PresentationModel, SlideModel};
 pub use office_toolkit::powerpoint::Presentation;

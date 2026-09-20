@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 office-toolkit = { workspace = true, features = ["powerpoint"] }
+opc-ooxml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "1"
