@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/omashow-core",
+    "crates/omashow-cli",
     "apps/omashow-tauri",
 ]
 resolver = "2"
