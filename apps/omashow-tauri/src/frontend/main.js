@@ -48,87 +48,6 @@ function hasDeck() {
   $("notes-bar").style.display = model && model.slides.length > 0 ? "block" : "none";
 }
 
-// ---------- faithful slide rendering ----------
-// One slide's shapes drawn into a positioned container, scaled from EMU
-// slide coordinates: the filmstrip's .slide-thumb (mini) or #slide-stage.
-const NON_SOLID_FILLS = new Set(["none", "gradient", "pattern", "image"]);
-
-function renderSlideInto(container, content, mini = false) {
-  container.querySelectorAll(".slide-shape,.slide-pic").forEach((el) => el.remove());
-  const dims = content.slide_dimensions;
-  const w = container.clientWidth || (mini ? 244 : 960);
-  const pxPerEmu = w / dims.width_emu;
-  const pxPerInch = pxPerEmu * 914400;
-  drawShapes(container, content.shapes, pxPerEmu, pxPerInch, mini);
-}
-
-function drawShapes(container, shapes, pxPerEmu, pxPerInch, mini) {
-  for (const sh of shapes) {
-    if (sh.children) { drawShapes(container, sh.children, pxPerEmu, pxPerInch, mini); continue; }
-    if (sh.kind === "picture") {
-      if (!sh.bounds) continue;
-      const pic = document.createElement("div");
-      pic.className = "slide-pic";
-      place(pic, sh.bounds, pxPerEmu);
-      container.appendChild(pic);
-      continue;
-    }
-    if (sh.kind !== "autoshape" || !sh.bounds) continue;
-    const el = document.createElement("div");
-    el.className = "slide-shape";
-    place(el, sh.bounds, pxPerEmu);
-    if (sh.fill && !NON_SOLID_FILLS.has(sh.fill)) el.style.background = sh.fill;
-    if (sh.line && sh.line.color && sh.line.width_emu) {
-      const bw = Math.max(mini ? 1 : 0.5, (sh.line.width_emu / 914400) * pxPerInch);
-      el.style.border = bw + "px solid " + sh.line.color;
-    }
-    if (sh.runs.length) {
-      const basePt = sh.placeholder === "title" || sh.placeholder === "ctrTitle" ? 28 : 18;
-      el.style.fontSize = ptToPx(basePt, pxPerInch, mini);
-      const aligned = sh.runs.find((r) => r.alignment);
-      if (aligned) el.style.textAlign = aligned.alignment;
-      appendRuns(el, sh.runs, pxPerInch, mini);
-    }
-    container.appendChild(el);
-  }
-}
-
-function ptToPx(pt, pxPerInch, mini) {
-  const px = (pt / 72) * pxPerInch;
-  return (mini ? Math.max(4, Math.min(16, px)) : px) + "px";
-}
-
-function place(el, b, pxPerEmu) {
-  el.style.left = b.x_emu * pxPerEmu + "px";
-  el.style.top = b.y_emu * pxPerEmu + "px";
-  el.style.width = b.width_emu * pxPerEmu + "px";
-  el.style.height = b.height_emu * pxPerEmu + "px";
-}
-
-function appendRuns(el, runs, pxPerInch, mini = false) {
-  let para = 0;
-  for (const r of runs) {
-    if (r.paragraph !== para) {
-      el.appendChild(document.createElement("br"));
-      para = r.paragraph;
-    }
-    if (r.text === "\n") {
-      el.appendChild(document.createElement("br"));
-      continue;
-    }
-    const s = document.createElement("span");
-    s.textContent = r.text;
-    if (r.bold) s.style.fontWeight = "700";
-    if (r.italic) s.style.fontStyle = "italic";
-    if (r.color) s.style.color = r.color;
-    // Explicit sans fallback: an unknown family (e.g. Calibri on Linux) would
-    // otherwise degrade to the browser's default serif.
-    if (r.font_family) s.style.fontFamily = r.font_family + ", system-ui, sans-serif";
-    if (r.font_size_pt) s.style.fontSize = ptToPx(r.font_size_pt, pxPerInch, mini);
-    el.appendChild(s);
-  }
-}
-
 // ---------- slide content cache ----------
 // Per-slide shape content, fetched lazily from get_slide_content and cached
 // here so both the filmstrip and the canvas can paint from it.
@@ -157,9 +76,10 @@ function fitCanvas() {
     canvas.style.height = (d.height_emu / 914400) * 96 * pct + "px";
     return;
   }
-  const presenting = document.body.classList.contains("presenting");
-  const availW = presenting ? window.innerWidth : Math.max(100, $("preview-wrap").clientWidth - 56);
-  const availH = presenting ? window.innerHeight : Math.max(100, $("preview-wrap").clientHeight - 56);
+  // While presenting, #preview-wrap already shrinks to make room for the
+  // console side panel, so its box is the right reference in both modes.
+  const availW = Math.max(100, $("preview-wrap").clientWidth - 56);
+  const availH = Math.max(100, $("preview-wrap").clientHeight - 56);
   let w = availW;
   let h = (w * d.height_emu) / d.width_emu;
   if (h > availH) { h = availH; w = (h * d.width_emu) / d.height_emu; }
@@ -184,11 +104,80 @@ function enterPresent() {
   const host = $("main");
   if (host.requestFullscreen) host.requestFullscreen().catch(() => {});
   paintCurrentSlide();
+  updateConsole();
+  startTimer();
 }
 function exitPresent() {
   document.body.classList.remove("presenting");
   document.body.classList.remove("chrome-visible");
+  stopTimer();
+  invoke("close_audience_window").catch(() => {});
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+// ---------- presenter console: next slide, notes, timer ----------
+let presentStart = 0;
+let timerInt = null;
+function fmtElapsed(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  const mm = String(m).padStart(2, "0"), sec = String(ss).padStart(2, "0");
+  return h ? h + ":" + mm + ":" + sec : mm + ":" + sec;
+}
+function tickTimer() {
+  $("timer-elapsed").textContent = fmtElapsed(Date.now() - presentStart);
+  $("timer-clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function startTimer() {
+  presentStart = Date.now();
+  tickTimer();
+  clearInterval(timerInt);
+  timerInt = setInterval(tickTimer, 1000);
+}
+function stopTimer() {
+  clearInterval(timerInt);
+  timerInt = null;
+}
+
+function updateConsole() {
+  if (!model) return;
+  $("console-notes").textContent = currentSlide >= 0 ? (model.slides[currentSlide].notes || "") : "";
+  if (currentSlide < 0) { $("next-label").textContent = "—"; return; }
+  const next = currentSlide + 1;
+  if (next < model.slides.length) {
+    const t = model.slides[next].title;
+    $("next-label").textContent = "Slide " + (next + 1) + (t ? " — " + t : "");
+    fetchSlideContent(next);
+    const cached = slideContents.get(next);
+    if (cached) renderSlideInto($("next-thumb"), cached, true);
+  } else {
+    $("next-label").textContent = "End of deck";
+  }
+}
+
+// ---------- audience window event sync ----------
+function emitToAudience(event, payload) {
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if (ev) ev.emit(event, payload).catch(() => {});
+}
+let blackedOut = false;
+function toggleBlackout() {
+  if (!presenting()) return;
+  blackedOut = !blackedOut;
+  emitToAudience("blackout-toggle", { on: blackedOut });
+}
+
+async function startPresentation() {
+  if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+  enterPresent();
+  try {
+    const name = await invoke("open_audience_window", { monitorName: null });
+    flash("audience window on " + name);
+  } catch (e) { flash(String(e), "err"); }
+}
+
+if (window.__TAURI__ && window.__TAURI__.event) {
+  window.__TAURI__.event.listen("present-exit", () => exitPresent()).catch(() => {});
 }
 function nudgePresentChrome() {
   if (!presenting()) return;
@@ -233,6 +222,7 @@ function paintSlide(i, content) {
     fitCanvas();
     renderSlideInto($("slide-stage"), content, false);
   }
+  if (i === currentSlide + 1) renderSlideInto($("next-thumb"), content, true);
   updateInspector();
 }
 
@@ -271,6 +261,7 @@ function paintCurrentSlide() {
 }
 
 // ---------- filmstrip ----------
+let dragFrom = -1;
 function renderFilmstrip() {
   const list = $("slides");
   list.innerHTML = "";
@@ -324,6 +315,7 @@ function renderFilmstrip() {
           fetchSlideContent(i, true);
           flash("title saved");
           markState("edited");
+          refreshUndoUI();
         })
         .catch((e) => flash(String(e), "err"));
     }, 400);
@@ -333,6 +325,48 @@ function renderFilmstrip() {
     cap.append(idx, input);
     item.append(thumb, cap);
     item.addEventListener("click", () => selectSlide(i));
+
+    // drag & drop reorder: grab a thumb, drop it on another slide
+    item.draggable = true;
+    item.addEventListener("dragstart", (e) => {
+      if (e.target.closest("input,button")) { e.preventDefault(); return; }
+      dragFrom = i;
+      e.dataTransfer.effectAllowed = "move";
+      item.classList.add("dragging");
+    });
+    item.addEventListener("dragend", () => {
+      dragFrom = -1;
+      item.classList.remove("dragging");
+      list.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+    });
+    item.addEventListener("dragover", (e) => {
+      if (dragFrom < 0 || dragFrom === i) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      item.classList.add("drag-over");
+    });
+    item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (dragFrom < 0 || dragFrom === i) return;
+      const from = dragFrom;
+      dragFrom = -1;
+      item.classList.remove("drag-over");
+      const follow = currentSlide === from;
+      invoke("move_slide", { from, to: i })
+        .then((m) => {
+          if (follow) currentSlide = i;
+          model = JSON.parse(m);
+          renderFilmstrip();
+          refreshThumbs();
+          paintCurrentSlide();
+          updatePreview();
+          refreshUndoUI();
+          markState("edited");
+          flash("slide moved");
+        })
+        .catch((err) => flash(String(err), "err"));
+    });
     list.appendChild(item);
 
     const cached = slideContents.get(i);
@@ -365,6 +399,8 @@ function selectSlide(i) {
   if (active) active.scrollIntoView({ block: "nearest" });
   paintCurrentSlide();
   updatePreview();
+  updateConsole();
+  emitToAudience("slide-changed", { index: i });
 }
 
 function applyModel(data, selectLast = false) {
@@ -378,7 +414,9 @@ function applyModel(data, selectLast = false) {
   paintCurrentSlide();
   if (currentSlide < 0) clearSlideCounter();
   else updatePreview();
+  updateConsole();
   hasDeck();
+  refreshUndoUI();
 }
 
 // ---------- actions ----------
@@ -441,18 +479,105 @@ $("notes-label").onclick = () => $("notes-bar").classList.toggle("collapsed");
 $("btn-present").onclick = enterPresent;
 syncZoomUI();
 const addSlide = () => {
-  invoke("add_slide", { title: null })
+  const idx = Math.max(0, currentSlide + 1);
+  invoke("add_slide_at", { index: idx, title: null })
     .then((m) => {
-      applyModel(m, true);
+      applyModel(m);
+      currentSlide = idx;
+      renderFilmstrip();
       markState("edited");
       flash("slide added");
-      const items = document.querySelectorAll(".slide-item");
-      const last = items[items.length - 1];
-      if (last) last.querySelector("input").focus();
+      const item = document.querySelectorAll(".slide-item")[idx];
+      if (item) item.querySelector("input").focus();
     })
     .catch((e) => flash(String(e), "err"));
 };
 $("btn-add").onclick = addSlide;
+
+// ---------- undo / redo ----------
+function refreshUndoUI() {
+  const u = $("btn-undo"), r = $("btn-redo");
+  if (!model) { u.disabled = true; r.disabled = true; return; }
+  invoke("undo_state")
+    .then((s) => {
+      u.disabled = !s.can_undo;
+      u.title = s.can_undo ? "Undo: " + s.last + " (Ctrl+Z)" : "Nothing to undo";
+      r.disabled = !s.can_redo;
+    })
+    .catch(() => {});
+}
+function doUndo() {
+  invoke("undo_presentation")
+    .then((m) => { applyModel(m); markState("edited"); flash("undone"); })
+    .catch((e) => flash(String(e), "err"));
+}
+function doRedo() {
+  invoke("redo_presentation")
+    .then((m) => { applyModel(m); markState("edited"); flash("redone"); })
+    .catch((e) => flash(String(e), "err"));
+}
+$("btn-undo").onclick = doUndo;
+$("btn-redo").onclick = doRedo;
+
+// ---------- text editing: double-click a shape to edit its text ----------
+function findShapeById(shapes, id) {
+  for (const s of shapes) {
+    if (s.id === id) return s;
+    if (s.children) {
+      const hit = findShapeById(s.children, id);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+const textEdit = $("text-edit");
+let textEditCtx = null;
+function openTextEdit(el) {
+  if (presenting() || !model) return;
+  const shapeId = Number(el.dataset.shapeId);
+  if (!shapeId) return;
+  const content = slideContents.get(currentSlide);
+  const shape = content && findShapeById(content.shapes, shapeId);
+  const initial = shape && shape.text != null ? shape.text : el.innerText;
+  const canvas = $("slide-canvas").getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  textEditCtx = { slide: currentSlide, shapeId, initial };
+  textEdit.value = initial;
+  textEdit.style.left = (r.left - canvas.left) + "px";
+  textEdit.style.top = (r.top - canvas.top) + "px";
+  textEdit.style.width = r.width + "px";
+  textEdit.style.height = r.height + "px";
+  textEdit.style.fontSize = getComputedStyle(el).fontSize;
+  textEdit.style.display = "block";
+  textEdit.focus();
+  textEdit.select();
+}
+function closeTextEdit(commit) {
+  if (!textEditCtx) return;
+  const ctx = textEditCtx;
+  textEditCtx = null;
+  textEdit.style.display = "none";
+  const val = textEdit.value;
+  if (!commit || val === ctx.initial) return;
+  invoke("update_text_run", { slide: ctx.slide, shapeId: ctx.shapeId, newText: val })
+    .then(() => {
+      fetchSlideContent(ctx.slide, true);
+      markState("edited");
+      refreshUndoUI();
+      flash("text updated");
+    })
+    .catch((e) => flash(String(e), "err"));
+}
+textEdit.addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); closeTextEdit(true); }
+  else if (e.key === "Escape") { e.preventDefault(); closeTextEdit(false); }
+});
+textEdit.addEventListener("blur", () => closeTextEdit(true));
+$("slide-stage").addEventListener("dblclick", (e) => {
+  const el = e.target.closest(".slide-shape[data-shape-id]");
+  if (el) openTextEdit(el);
+});
 
 // notes editor — live, debounced
 const commitNotes = debounce(() => {
@@ -465,6 +590,8 @@ const commitNotes = debounce(() => {
       model = JSON.parse(m);
       markState("");
       flash("notes saved");
+      updateConsole();
+      refreshUndoUI();
     })
     .catch((e) => flash(String(e), "err"));
 }, 500);
@@ -479,10 +606,28 @@ notesInput.addEventListener("input", () => {
 
 // ---------- keyboard: arrows switch slides, Esc ends the show ----------
 document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z" || e.key === "y" || e.key === "Y")) {
+    if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+      if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") doRedo();
+      else doUndo();
+      return;
+    }
+  }
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
   if (presenting() && (e.key === "Escape" || e.key.toLowerCase() === "q")) {
     e.preventDefault();
     exitPresent();
+    return;
+  }
+  if (e.key === "F5") {
+    e.preventDefault();
+    if (!presenting()) startPresentation();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "b") {
+    e.preventDefault();
+    toggleBlackout();
     return;
   }
   if (!model) return;
@@ -507,5 +652,13 @@ window.addEventListener("resize", () => {
     paintCurrentSlide();
   }, 200);
 });
+
+// Launched with a file argument? Open that deck once the UI is up.
+invoke("initial_deck_path").then((p) => {
+  if (!p) return;
+  invoke("open_presentation", { path: p })
+    .then((sum) => { currentSlide = 0; applyModel(sum); setPath(p); flash("opened"); })
+    .catch((e) => flash(String(e), "err"));
+}).catch(() => {});
 
 hasDeck();

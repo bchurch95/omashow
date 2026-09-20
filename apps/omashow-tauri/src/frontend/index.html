@@ -84,6 +84,8 @@
       transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
     button svg { width: 13px; height: 13px; flex-shrink: 0; }
+    button.icon-btn { padding: 7px 9px; }
+    button:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
     .divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 3px; }
     button:hover { border-color: var(--accent); background: #2a3247; color: #fff; }
     button:active { background: #232a3c; transform: translateY(1px); }
@@ -124,6 +126,8 @@
     }
     .slide-item:hover { border-color: #3a445c; background: #20263a; }
     .slide-item.active { border-color: var(--accent); background: #202940; }
+    .slide-item.dragging { opacity: 0.4; }
+    .slide-item.drag-over { border-color: var(--accent-2); background: #252c4d; }
     .slide-thumb {
       position: relative;
       width: 100%;
@@ -192,6 +196,63 @@
       min-height: 0;
       background: radial-gradient(1100px 640px at 50% 44%, #202942 0%, #10131a 72%);
     }
+    /* ---------- presenter console (visible while presenting) ---------- */
+    #console-side {
+      display: none;
+      width: 340px;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px 20px;
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+      overflow: hidden;
+    }
+    #console-side h3 {
+      margin: 0 0 8px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #d0d8e6;
+    }
+    #next-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    #next-label {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #9aa3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .notes-block { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #console-notes {
+      flex: 1;
+      min-height: 40px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.55;
+      color: #c6cedd;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #console-timer {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
+    }
+    #timer-elapsed { font-size: 22px; font-weight: 650; color: #edf1f7; }
+    #timer-clock { font-size: 13px; color: #9aa3b8; }
     #slide-canvas {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -210,6 +271,24 @@
       overflow: hidden;
     }
     #slide-stage { position: absolute; inset: 0; }
+    #text-edit {
+      position: absolute;
+      display: none;
+      z-index: 20;
+      margin: 0;
+      padding: 4px 6px;
+      border: 2px solid var(--accent);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.97);
+      color: #1a1a2e;
+      font-family: inherit;
+      line-height: 1.25;
+      resize: none;
+      overflow: hidden;
+      outline: none;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    body.presenting #text-edit { display: none !important; }
     /* shapes rendered from PPTX data: EMU-proportional boxes with the
        slide's own fills, strokes, and typography */
     .slide-shape {
@@ -377,6 +456,8 @@
     body.presenting.chrome-visible #topbar { opacity: 1; pointer-events: auto; }
     body.presenting #preview-wrap { padding: 0; }
     body.presenting #slide-canvas { border: none; border-radius: 0; box-shadow: none; }
+    body.presenting #main { flex-direction: row; }
+    body.presenting #console-side { display: flex; }
     #status .ok { color: var(--green); }
     #status .err { color: var(--danger); }
     .vdiv { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; }
@@ -402,7 +483,10 @@
       <button id="btn-save" title="Save deck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18H5z"/><path d="M8 3v6h8V3"/><path d="M8 14h8v7H8z"/></svg>Save</button>
       <button id="btn-saveas" title="Save deck as…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18H5z"/><path d="M8 3v6h8V3"/><path d="M8 14h8v7H8z"/></svg>Save As</button>
       <span class="divider"></span>
-      <button id="btn-add" title="Add a slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>Add Slide</button>
+      <button id="btn-add" title="Add a slide after the current one"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>Add Slide</button>
+      <span class="divider"></span>
+      <button id="btn-undo" class="icon-btn" title="Undo (Ctrl+Z)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button id="btn-redo" class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     </div>
     <button id="btn-present" class="primary" title="Start the show — arrows to navigate, Esc to exit"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z"/></svg>Present</button>
   </header>
@@ -415,6 +499,7 @@
     <div id="preview-wrap">
       <div id="slide-canvas">
         <div id="slide-stage"></div>
+        <textarea id="text-edit" spellcheck="false"></textarea>
         <div id="empty-msg" class="empty-state">
           Open a .pptx or create a new deck to begin
         </div>
@@ -438,6 +523,21 @@
       <span class="vdiv"></span>
       <span id="status-msg"></span>
     </div>
+    <aside id="console-side">
+      <section class="console-block">
+        <h3>Up next</h3>
+        <div id="next-thumb"></div>
+        <div id="next-label">—</div>
+      </section>
+      <section class="console-block notes-block">
+        <h3>Speaker notes</h3>
+        <div id="console-notes"></div>
+      </section>
+      <footer id="console-timer">
+        <span id="timer-elapsed">00:00</span>
+        <span id="timer-clock">--:--</span>
+      </footer>
+    </aside>
   </div>
 
   <aside id="inspector">
@@ -449,6 +549,7 @@
     <div class="row"><span>Title</span><b id="insp-title">–</b></div>
   </aside>
   </div>
+  <script src="slide_render.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

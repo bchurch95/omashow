@@ -19,4 +19,7 @@ pub enum Error {
 
     #[error("Slide index {0} out of range")]
     OutOfRange(usize),
+
+    #[error("No shape with id {0} on the slide")]
+    ShapeNotFound(u32),
 }
