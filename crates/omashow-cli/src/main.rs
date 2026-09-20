@@ -12,6 +12,8 @@ enum Commands {
     New { output: String },
     Open { input: String },
     Save { input: String, output: String },
+    List { input: String },
+    Export { input: String, output: String },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -30,6 +32,18 @@ fn main() -> anyhow::Result<()> {
             let model = open_pptx(&input)?;
             save_pptx(&output, &model)?;
             println!("Saved {} -> {}", input, output);
+        }
+        Commands::List { input } => {
+            let model = open_pptx(&input)?;
+            println!("Presentation: {}", model.title);
+            for s in model.slides {
+                println!("  Slide {}: {:?}", s.index + 1, s.title);
+            }
+        }
+        Commands::Export { input, output } => {
+            let model = open_pptx(&input)?;
+            std::fs::write(&output, serde_json::to_string_pretty(&model)?)?;
+            println!("Exported {} -> {}", input, output);
         }
     }
     Ok(())

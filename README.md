@@ -14,6 +14,13 @@ Create a demo PPTX:
 cargo run --example create_demo -p omashow-core
 ```
 
+CLI usage:
+```bash
+cargo run -p omashow-cli -- new deck.pptx
+cargo run -p omashow-cli -- list deck.pptx
+cargo run -p omashow-cli -- export deck.pptx deck.json
+```
+
 Run Tauri app:
 ```bash
 cd apps/omashow-tauri
@@ -22,13 +29,13 @@ cargo tauri dev
 
 ## Development
 
+Project is a Cargo workspace. Core is pure Rust, UI is Tauri + web.
+
 ```bash
 git init
 git add .
 git commit -m "Initial scaffold"
 ```
-
-Project is a Cargo workspace. Core is pure Rust, UI is Tauri + web.
 
 
 ## Roadmap

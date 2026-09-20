@@ -1,5 +1,5 @@
 use office_toolkit::prelude::*;
-use office_toolkit::SaveToFile;
+use office_toolkit::{OpenFile, SaveToFile};
 use office_toolkit::powerpoint::{Slide, Presentation};
 
 pub mod error;
