@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "dev.omashow.app",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../src/frontend"
   },
   "app": {
     "withGlobalTauri": true,
@@ -19,6 +19,13 @@
         "resizable": true,
         "center": true
       }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
     ]
   }
 }

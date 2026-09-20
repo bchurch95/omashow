@@ -1,0 +1,64 @@
+name: Build & Release macOS App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache cargo registry & build targets
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/omashow-core
+            crates/omashow-cli
+            apps/omashow-tauri/src-tauri
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Build macOS App & DMG
+        working-directory: apps/omashow-tauri
+        run: |
+          cargo tauri build
+
+      - name: Prepare build artifacts
+        run: |
+          mkdir -p artifacts
+          BUNDLE_DIR="apps/omashow-tauri/src-tauri/target/release/bundle"
+          if [ -d "$BUNDLE_DIR/dmg" ]; then
+            cp $BUNDLE_DIR/dmg/*.dmg artifacts/ || true
+          fi
+          if [ -d "$BUNDLE_DIR/macos" ]; then
+            cd "$BUNDLE_DIR/macos"
+            tar -czf "$GITHUB_WORKSPACE/artifacts/Omashow-macos-app.tar.gz" Omashow.app
+            cd "$GITHUB_WORKSPACE"
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Omashow-macOS
+          path: artifacts/*
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
