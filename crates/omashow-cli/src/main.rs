@@ -14,6 +14,7 @@ enum Commands {
     Save { input: String, output: String },
     List { input: String },
     Export { input: String, output: String },
+    Edit { input: String, output: String, slide: usize, title: String },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -44,6 +45,16 @@ fn main() -> anyhow::Result<()> {
             let model = open_pptx(&input)?;
             std::fs::write(&output, serde_json::to_string_pretty(&model)?)?;
             println!("Exported {} -> {}", input, output);
+        }
+        Commands::Edit { input, output, slide, title } => {
+            let mut model = open_pptx(&input)?;
+            if let Some(s) = model.slides.get_mut(slide) {
+                s.title = Some(title);
+                save_pptx(&output, &model)?;
+                println!("Edited slide {} -> {}", slide + 1, output);
+            } else {
+                anyhow::bail!("Slide {} not found", slide + 1);
+            }
         }
     }
     Ok(())
