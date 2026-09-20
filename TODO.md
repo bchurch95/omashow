@@ -8,8 +8,8 @@
 
 ## Milestone 2: Headless Slide Extraction & Inspection API
 - [x] Expose slide metadata APIs in `omashow-core` (`slide_count()`, `slide_dimensions()`, `get_slide_shapes()`).
-- [ ] Implement CLI inspect command: `cargo run -p omashow-cli -- inspect <path.pptx>` outputting structured JSON.
-- [ ] Add test cases verifying correct text run and bounding box extraction across multi-shape slides.
+- [x] Implement CLI inspect command: `cargo run -p omashow-cli -- inspect <path.pptx>` outputting structured JSON.
+- [x] Add test cases verifying correct text run and bounding box extraction across multi-shape slides.
 
 ## Milestone 3: High-Fidelity Slide Canvas & Viewer (Formatting Preservation)
 - [ ] Update Tauri backend commands in `apps/omashow-tauri/src-tauri/src/main.rs`:

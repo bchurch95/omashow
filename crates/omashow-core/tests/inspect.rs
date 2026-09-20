@@ -244,3 +244,72 @@ fn pptx_document_inspection_methods() {
 
     assert!(doc.get_slide_shapes(9).is_err());
 }
+
+/// The CLI `inspect` command emits `get_slide_shapes` as JSON; make sure the
+/// structure serializes cleanly and carries the fields a consumer needs
+/// (runs, bounds, nested groups) for a multi-shape slide.
+#[test]
+fn slide_shapes_serialize_to_json() {
+    let pres = fixture_deck();
+    let value = serde_json::to_value(get_slide_shapes(&pres, 0).unwrap()).expect("serialize");
+
+    let shapes = value.as_array().expect("shape array");
+    assert_eq!(shapes.len(), 4);
+
+    // Title: bold 24pt Calibri run, italic run, then "Second" + line break +
+    // "line" in paragraph 1.
+    let title = &shapes[0];
+    assert_eq!(title["kind"], "autoshape");
+    assert_eq!(title["placeholder"], "title");
+    assert_eq!(title["text"], "Hello World\nSecond\nline");
+    assert_eq!(title["bounds"]["x_emu"], 1_000_000);
+    assert_eq!(title["bounds"]["height_emu"], 1_000_000);
+    let runs = title["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 5);
+    assert_eq!(runs[0]["paragraph"], 0);
+    assert_eq!(runs[0]["text"], "Hello ");
+    assert_eq!(runs[0]["bold"], true);
+    assert_eq!(runs[0]["font_size_pt"], 24.0);
+    assert_eq!(runs[0]["font_family"], "Calibri");
+    assert_eq!(runs[1]["text"], "World");
+    assert_eq!(runs[1]["italic"], true);
+    assert!(runs[1]["font_size_pt"].is_null());
+    assert_eq!(runs[2]["text"], "Second");
+    assert_eq!(runs[2]["paragraph"], 1);
+    assert_eq!(runs[3]["text"], "\n");
+    assert_eq!(runs[3]["paragraph"], 1);
+    assert_eq!(runs[4]["text"], "line");
+
+    // Text box: bounds and text.
+    let box_shape = &shapes[1];
+    assert_eq!(box_shape["name"], "Box");
+    assert_eq!(box_shape["bounds"]["x_emu"], 500);
+    assert_eq!(box_shape["bounds"]["y_emu"], 300);
+    assert_eq!(box_shape["bounds"]["width_emu"], 200);
+    assert_eq!(box_shape["bounds"]["height_emu"], 100);
+    assert_eq!(box_shape["runs"][0]["text"], "Box");
+
+    // Picture: exact bounds, no text.
+    let pic = &shapes[2];
+    assert_eq!(pic["kind"], "picture");
+    assert_eq!(pic["bounds"]["x_emu"], 10_000_000);
+    assert_eq!(pic["bounds"]["y_emu"], 5_000_000);
+    assert_eq!(pic["bounds"]["width_emu"], 1_000_000);
+    assert_eq!(pic["bounds"]["height_emu"], 2_000_000);
+    assert!(pic["text"].is_null());
+    assert!(pic["runs"].as_array().unwrap().is_empty());
+
+    // Group: own bounds, child remapped 2× out of its 1000×500 space.
+    let group = &shapes[3];
+    assert_eq!(group["kind"], "group");
+    assert_eq!(group["bounds"]["x_emu"], 1_000_000);
+    assert_eq!(group["bounds"]["y_emu"], 2_000_000);
+    assert_eq!(group["bounds"]["width_emu"], 2_000_000);
+    let children = group["children"].as_array().unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0]["name"], "Child");
+    assert_eq!(children[0]["bounds"]["x_emu"], 1_000_200); // (100) * 2 + 1_000_000
+    assert_eq!(children[0]["bounds"]["y_emu"], 2_000_100); // (50) * 2 + 2_000_000
+    assert_eq!(children[0]["bounds"]["width_emu"], 200); // 100 * 2
+    assert!(children[0]["text"].is_null());
+}

@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use omashow_core::{open_pptx, save_pptx, PresentationModel};
+use omashow_core::{
+    model_of, open_pptx, save_pptx, PptxDocument, PresentationModel, SlideDimensions,
+};
+use serde::Serialize;
 
 #[derive(Parser)]
 struct Cli {
@@ -15,6 +18,25 @@ enum Commands {
     List { input: String },
     Export { input: String, output: String },
     Edit { input: String, output: String, slide: usize, title: String },
+    Inspect { input: String },
+}
+
+/// One slide of the `inspect` output: metadata plus the full shape view.
+#[derive(Serialize)]
+struct SlideInspect {
+    index: usize,
+    title: Option<String>,
+    notes: Option<String>,
+    shapes: Vec<omashow_core::ShapeInfo>,
+}
+
+/// Structured deck description for `inspect`.
+#[derive(Serialize)]
+struct InspectOutput {
+    title: String,
+    slide_count: usize,
+    slide_dimensions: SlideDimensions,
+    slides: Vec<SlideInspect>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -55,6 +77,27 @@ fn main() -> anyhow::Result<()> {
             } else {
                 anyhow::bail!("Slide {} not found", slide + 1);
             }
+        }
+        Commands::Inspect { input } => {
+            let doc = PptxDocument::open(&input)?;
+            let model = model_of(&doc.pres);
+            let mut slides = Vec::with_capacity(doc.slide_count());
+            for i in 0..doc.slide_count() {
+                let shapes = doc.get_slide_shapes(i)?;
+                slides.push(SlideInspect {
+                    index: i,
+                    title: model.slides[i].title.clone(),
+                    notes: model.slides[i].notes.clone(),
+                    shapes,
+                });
+            }
+            let out = InspectOutput {
+                title: model.title,
+                slide_count: doc.slide_count(),
+                slide_dimensions: doc.slide_dimensions(),
+                slides,
+            };
+            println!("{}", serde_json::to_string_pretty(&out)?);
         }
     }
     Ok(())
