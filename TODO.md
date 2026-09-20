@@ -7,7 +7,7 @@
 - [x] Run `cargo clippy --workspace --all-targets -- -D warnings` and fix any compiler warnings or lint issues.
 
 ## Milestone 2: Headless Slide Extraction & Inspection API
-- [ ] Expose slide metadata APIs in `omashow-core` (`slide_count()`, `slide_dimensions()`, `get_slide_shapes()`).
+- [x] Expose slide metadata APIs in `omashow-core` (`slide_count()`, `slide_dimensions()`, `get_slide_shapes()`).
 - [ ] Implement CLI inspect command: `cargo run -p omashow-cli -- inspect <path.pptx>` outputting structured JSON.
 - [ ] Add test cases verifying correct text run and bounding box extraction across multi-shape slides.
 

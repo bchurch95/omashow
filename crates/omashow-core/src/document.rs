@@ -82,6 +82,23 @@ impl PptxDocument {
         self.dirty
     }
 
+    /// Number of slides in the deck.
+    pub fn slide_count(&self) -> usize {
+        crate::inspect::slide_count(&self.pres)
+    }
+
+    /// Slide canvas size in EMUs.
+    pub fn slide_dimensions(&self) -> crate::inspect::SlideDimensions {
+        crate::inspect::slide_dimensions(&self.pres)
+    }
+
+    /// Serializable shape view for slide `slide` — kinds, placeholder roles,
+    /// bounds in slide coordinates, and text runs (group children included
+    /// with remapped bounds).
+    pub fn get_slide_shapes(&self, slide: usize) -> Result<Vec<crate::inspect::ShapeInfo>, Error> {
+        crate::inspect::get_slide_shapes(&self.pres, slide)
+    }
+
     /// Set a slide's title in place.
     pub fn set_title(&mut self, slide: usize, title: &str) -> Result<(), Error> {
         crate::set_slide_title(&mut self.pres, slide, title)?;

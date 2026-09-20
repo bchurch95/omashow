@@ -115,7 +115,7 @@ fn extract_slide_title(slide: &Slide) -> String {
     String::new()
 }
 
-fn text_body_to_string(tb: &TextBody) -> String {
+pub(crate) fn text_body_to_string(tb: &TextBody) -> String {
     let mut out = String::new();
     for para in &tb.paragraphs {
         let mut line = String::new();
