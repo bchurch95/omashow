@@ -40,7 +40,7 @@ jobs:
       - name: Prepare build artifacts
         run: |
           mkdir -p artifacts
-          BUNDLE_DIR="apps/omashow-tauri/src-tauri/target/release/bundle"
+          BUNDLE_DIR="target/release/bundle"
           if [ -d "$BUNDLE_DIR/dmg" ]; then
             cp $BUNDLE_DIR/dmg/*.dmg artifacts/ || true
           fi
