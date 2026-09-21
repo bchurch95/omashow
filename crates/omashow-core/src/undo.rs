@@ -13,11 +13,15 @@ use office_toolkit::powerpoint::{Presentation, Shape, Slide};
 #[derive(Debug, Clone)]
 pub enum UndoCommand {
     /// The slide list from `from` onward, captured before and after the change.
-    /// Covers slide insert, delete, and reorder.
+    /// Covers slide insert, delete, and reorder. `ord_*` mirrors the tail of
+    /// the document's original-file slide ordinals so per-slide extras (like
+    /// inherited placeholder geometry) follow their slides through undo/redo.
     Slides {
         from: usize,
         before: Vec<Slide>,
         after: Vec<Slide>,
+        ord_before: Vec<Option<usize>>,
+        ord_after: Vec<Option<usize>>,
         description: String,
     },
     /// One slide's shape tree, captured before and after.
@@ -135,21 +139,22 @@ impl UndoStack {
     }
 
     /// Undoes the most recent command, applying its revert direction.
-    pub fn undo(&mut self, pres: &mut Presentation) -> Option<String> {
+    /// Returns the executed command so callers can mirror its slide-list
+    /// change into their own per-slide bookkeeping.
+    pub fn undo(&mut self, pres: &mut Presentation) -> Option<UndoCommand> {
         let command = self.undo.pop()?;
-        let desc = command.description().to_string();
         command.revert(pres);
-        self.redo.push(command);
-        Some(desc)
+        self.redo.push(command.clone());
+        Some(command)
     }
 
-    /// Re-applies the most recently undone command.
-    pub fn redo(&mut self, pres: &mut Presentation) -> Option<String> {
+    /// Re-applies the most recently undone command. Returns the executed
+    /// command (see [`Self::undo`]).
+    pub fn redo(&mut self, pres: &mut Presentation) -> Option<UndoCommand> {
         let command = self.redo.pop()?;
-        let desc = command.description().to_string();
         command.apply(pres);
-        self.undo.push(command);
-        Some(desc)
+        self.undo.push(command.clone());
+        Some(command)
     }
 
     /// Clears both sides (e.g. when a new deck replaces the current one).
@@ -210,17 +215,24 @@ mod tests {
         let new_slide = slide_with_title("B");
         let before = Vec::new();
         let after = vec![new_slide.clone()];
-        stack.record(UndoCommand::Slides { from: 1, before, after: after.clone(), description: "add slide".into() });
+        stack.record(UndoCommand::Slides {
+            from: 1,
+            before,
+            after: after.clone(),
+            ord_before: Vec::new(),
+            ord_after: vec![None],
+            description: "add slide".into(),
+        });
         pres.slides.push(new_slide);
         assert_eq!(titles(&pres), vec!["A", "B"]);
 
         let undone = stack.undo(&mut pres).expect("undo works");
-        assert_eq!(undone, "add slide");
+        assert_eq!(undone.description(), "add slide");
         assert_eq!(titles(&pres), vec!["A"]);
         assert!(stack.can_redo() && !stack.can_undo());
 
         let redone = stack.redo(&mut pres).expect("redo works");
-        assert_eq!(redone, "add slide");
+        assert_eq!(redone.description(), "add slide");
         assert_eq!(titles(&pres), vec!["A", "B"]);
         assert!(stack.can_undo() && !stack.can_redo());
     }
@@ -239,7 +251,14 @@ mod tests {
         moved.insert(0, c);
         pres.slides = moved;
         assert_eq!(titles(&pres), vec!["C", "A", "B"]);
-        stack.record(UndoCommand::Slides { from: 0, before, after: pres.slides.clone(), description: "move slide".into() });
+        stack.record(UndoCommand::Slides {
+            from: 0,
+            before,
+            after: pres.slides.clone(),
+            ord_before: vec![Some(0), Some(1), Some(2)],
+            ord_after: vec![Some(2), Some(0), Some(1)],
+            description: "move slide".into(),
+        });
 
         stack.undo(&mut pres).unwrap();
         assert_eq!(titles(&pres), vec!["A", "B", "C"]);

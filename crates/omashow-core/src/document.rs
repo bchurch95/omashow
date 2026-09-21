@@ -24,6 +24,7 @@ use opc_ooxml::{Package, Relationship};
 use office_toolkit::powerpoint::Slide;
 
 use crate::error::Error;
+use crate::layout_geom::{LayoutGeometry, PhMap};
 use crate::undo::{UndoCommand, UndoStack};
 
 /// A PPTX document: the editable model plus the original parts, for lossless saves.
@@ -42,6 +43,12 @@ pub struct PptxDocument {
     dirty: bool,
     /// Command-pattern history of every mutation, for undo/redo.
     history: UndoStack,
+    /// Which original file slide each current slide descended from
+    /// (`None` for slides created in-session), in model slide order.
+    slide_ordinals: Vec<Option<usize>>,
+    /// Per original-file slide, the placeholder geometry inherited from its
+    /// layout/master chain.
+    geom_by_ordinal: Vec<PhMap>,
 }
 
 impl Default for PptxDocument {
@@ -60,6 +67,8 @@ impl PptxDocument {
             is_new: true,
             dirty: false,
             history: UndoStack::new(),
+            slide_ordinals: Vec::new(),
+            geom_by_ordinal: Vec::new(),
         }
     }
 
@@ -69,6 +78,11 @@ impl PptxDocument {
         let bytes = std::fs::read(path)?;
         let orig = Package::read_from(Cursor::new(&bytes))?;
         let pres = Presentation::read_from(Cursor::new(&bytes))?;
+        let geom_by_ordinal = LayoutGeometry::from_package(&orig).into_maps();
+        let geom_len = geom_by_ordinal.len();
+        let slide_ordinals = (0..pres.slides.len())
+            .map(|i| (i < geom_len).then_some(i))
+            .collect();
         Ok(Self {
             pres,
             orig,
@@ -76,6 +90,8 @@ impl PptxDocument {
             is_new: false,
             dirty: false,
             history: UndoStack::new(),
+            slide_ordinals,
+            geom_by_ordinal,
         })
     }
 
@@ -103,7 +119,17 @@ impl PptxDocument {
     /// bounds in slide coordinates, and text runs (group children included
     /// with remapped bounds).
     pub fn get_slide_shapes(&self, slide: usize) -> Result<Vec<crate::inspect::ShapeInfo>, Error> {
-        crate::inspect::get_slide_shapes(&self.pres, slide)
+        let geom = self.geom_for(slide);
+        crate::inspect::get_slide_shapes_geom(&self.pres, slide, geom)
+    }
+
+    /// The resolved placeholder-geometry table for a current slide, when it
+    /// descended from an original file slide carrying inherited placeholders.
+    fn geom_for(&self, slide: usize) -> Option<&PhMap> {
+        let ordinal = *self.slide_ordinals.get(slide)?.as_ref()?;
+        self.geom_by_ordinal
+            .get(ordinal)
+            .filter(|m| !m.is_empty())
     }
 
     /// Set a slide's title in place (undoable).
@@ -145,6 +171,7 @@ impl PptxDocument {
     pub fn add_slide_at(&mut self, index: usize, title: Option<String>) -> Result<usize, Error> {
         let before = self.pres.slides.get(index..).map(|t| t.to_vec()).ok_or(Error::OutOfRange(index))?;
         let idx = crate::add_slide_at(&mut self.pres, index, title)?;
+        self.slide_ordinals.insert(idx, None);
         self.record_slice_change(idx, before, "add slide");
         Ok(idx)
     }
@@ -153,6 +180,7 @@ impl PptxDocument {
     pub fn delete_slide(&mut self, slide: usize) -> Result<(), Error> {
         let before = self.pres.slides.get(slide..).map(|t| t.to_vec()).ok_or(Error::OutOfRange(slide))?;
         crate::delete_slide(&mut self.pres, slide)?;
+        self.slide_ordinals.remove(slide);
         self.record_slice_change(slide, before, "delete slide");
         Ok(())
     }
@@ -160,11 +188,16 @@ impl PptxDocument {
     /// Move a slide so the one at `from` ends up at position `to` (undoable).
     pub fn move_slide(&mut self, from: usize, to: usize) -> Result<(), Error> {
         let before = self.pres.slides.clone();
+        let ord_before = self.slide_ordinals.clone();
         crate::move_slide(&mut self.pres, from, to)?;
+        let ordinal = self.slide_ordinals.remove(from);
+        self.slide_ordinals.insert(to.min(self.slide_ordinals.len()), ordinal);
         self.history.record(UndoCommand::Slides {
             from: 0,
             before,
             after: self.pres.slides.clone(),
+            ord_before,
+            ord_after: self.slide_ordinals.clone(),
             description: "move slide".into(),
         });
         self.dirty = true;
@@ -194,6 +227,8 @@ impl PptxDocument {
             from,
             before: before_tail,
             after: after_tail,
+            ord_before: self.slide_ordinals[from..].to_vec(),
+            ord_after: self.slide_ordinals[from..].to_vec(),
             description: description.into(),
         });
         self.dirty = true;
@@ -201,16 +236,29 @@ impl PptxDocument {
 
     /// Undoes the most recent mutation; returns its description.
     pub fn undo(&mut self) -> Option<String> {
-        let desc = self.history.undo(&mut self.pres)?;
+        let command = self.history.undo(&mut self.pres)?;
+        if let UndoCommand::Slides { from, ord_before, .. } = &command {
+            self.splice_ordinals(*from, ord_before);
+        }
         self.dirty = true;
-        Some(desc)
+        Some(command.description().to_string())
     }
 
     /// Re-applies the most recently undone mutation; returns its description.
     pub fn redo(&mut self) -> Option<String> {
-        let desc = self.history.redo(&mut self.pres)?;
+        let command = self.history.redo(&mut self.pres)?;
+        if let UndoCommand::Slides { from, ord_after, .. } = &command {
+            self.splice_ordinals(*from, ord_after);
+        }
         self.dirty = true;
-        Some(desc)
+        Some(command.description().to_string())
+    }
+
+    /// Replaces the ordinal tail starting at `from` with the captured side.
+    fn splice_ordinals(&mut self, from: usize, ords: &[Option<usize>]) {
+        let from = from.min(self.slide_ordinals.len());
+        self.slide_ordinals.splice(from.., ords.iter().cloned());
+        self.slide_ordinals.truncate(self.pres.slides.len());
     }
 
     /// Whether an undo is available.

@@ -9,6 +9,7 @@ pub mod model;
 pub mod io;
 pub mod document;
 pub mod inspect;
+pub mod layout_geom;
 pub mod undo;
 
 pub use document::PptxDocument;
@@ -17,6 +18,7 @@ pub use inspect::{
     get_slide_shapes, slide_count, slide_dimensions, BoundingBox, LineInfo, ShapeInfo,
     SlideDimensions, TextRunInfo,
 };
+pub use layout_geom::{LayoutGeometry, PhGeom, PhMap};
 pub use model::{PresentationModel, SlideModel};
 pub use office_toolkit::powerpoint::Presentation;
 pub use undo::{UndoCommand, UndoStack};

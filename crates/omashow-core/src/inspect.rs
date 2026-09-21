@@ -16,6 +16,7 @@ use office_toolkit::powerpoint::{
 };
 
 use crate::error::Error;
+use crate::layout_geom::{xml_token, PhMap, PhKey};
 use crate::model::text_body_to_string;
 
 /// Slide canvas size in EMUs (`<p:sldSz cx=".." cy="..">`).
@@ -67,7 +68,10 @@ pub struct TextRunInfo {
     pub text: String,
     pub bold: bool,
     pub italic: bool,
-    /// `sz` in points (e.g. `18.0`); `None` when the run inherits its size.
+    /// `sz` in points (e.g. `18.0`); `None` when the run inherits its size
+    /// and no placeholder-level default is known. For placeholders, the
+    /// master's `<p:txStyles>` size is reported here when the run itself
+    /// declares none.
     pub font_size_pt: Option<f64>,
     pub font_family: Option<String>,
     /// Text color as a CSS value (see [`color_to_css`]); `None` when the run
@@ -111,8 +115,10 @@ pub struct ShapeInfo {
     pub kind: &'static str,
     /// Placeholder role (`"title"`, `"body"`, ...), when the shape is one.
     pub placeholder: Option<&'static str>,
-    /// Bounds in slide coordinates. `None` for placeholder autoshapes whose
-    /// geometry is inherited from the slide layout (not modeled).
+    /// Bounds in slide coordinates. Placeholder autoshapes that omit their
+    /// own transform inherit the matching layout/master placeholder's box
+    /// (resolved via [`crate::layout_geom`]), so `None` only remains for
+    /// shapes with no resolvable geometry at all.
     pub bounds: Option<BoundingBox>,
     /// The shape's full text, paragraphs joined by `\n`; `None` when the
     /// shape carries no text body.
@@ -138,6 +144,17 @@ pub struct ShapeInfo {
 /// into slide coordinates, so a flat consumer never has to re-derive the
 /// group transform.
 pub fn get_slide_shapes(pres: &Presentation, slide: usize) -> Result<Vec<ShapeInfo>, Error> {
+    get_slide_shapes_geom(pres, slide, None)
+}
+
+/// [`get_slide_shapes`] with the slide's resolved placeholder-geometry table
+/// (`layout_geom::PhMap`), so placeholder shapes that inherit their box from
+/// the layout/master carry real bounds instead of `None`.
+pub fn get_slide_shapes_geom(
+    pres: &Presentation,
+    slide: usize,
+    geom: Option<&PhMap>,
+) -> Result<Vec<ShapeInfo>, Error> {
     let slide = pres
         .slides
         .get(slide)
@@ -145,7 +162,7 @@ pub fn get_slide_shapes(pres: &Presentation, slide: usize) -> Result<Vec<ShapeIn
     Ok(slide
         .shapes
         .iter()
-        .map(|s| shape_info(s, &GroupContext::identity()))
+        .map(|s| shape_info(s, &GroupContext::identity(), geom))
         .collect())
 }
 
@@ -240,32 +257,56 @@ fn div_round(n: i128, d: i128) -> i128 {
     }
 }
 
-fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
+fn shape_info(shape: &Shape, ctx: &GroupContext, geom: Option<&PhMap>) -> ShapeInfo {
     match shape {
-        Shape::AutoShape(a) => ShapeInfo {
-            id: a.id,
-            name: a.name.clone(),
-            kind: "autoshape",
-            placeholder: a.placeholder.as_ref().map(|p| placeholder_token(&p.kind)),
-            bounds: a
+        Shape::AutoShape(a) => {
+            let placeholder = a.placeholder.as_ref().map(|p| placeholder_token(&p.kind));
+            // Placeholder shapes without their own transform inherit position,
+            // size, and default text size from the layout/master table.
+            let inherited = a
+                .placeholder
+                .as_ref()
+                .and_then(|p| {
+                    let key: PhKey = (xml_token(&p.kind), p.index.unwrap_or(0));
+                    geom.and_then(|g| g.get(&key))
+                });
+            let bounds = a
                 .properties
                 .transform
                 .as_ref()
                 .and_then(|t| match (t.offset, t.extent) {
                     (Some((x, y)), Some((w, h))) => Some(ctx.map_box(x, y, w, h)),
                     _ => None,
-                }),
-            text: a.text_body.as_ref().map(text_body_to_string),
-            fill: a.properties.fill.as_ref().map(fill_to_css),
-            line: a.properties.line.as_ref().map(line_info),
-            runs: a
-                .text_body
-                .as_ref()
-                .map(flatten_runs)
-                .unwrap_or_default(),
-            pic: None,
-            children: None,
-        },
+                })
+                .or_else(|| {
+                    inherited.map(|g| {
+                        ctx.map_box(
+                            g.bounds.x_emu,
+                            g.bounds.y_emu,
+                            g.bounds.width_emu,
+                            g.bounds.height_emu,
+                        )
+                    })
+                });
+            let default_size = inherited.and_then(|g| g.font_size_100ths_pt);
+            ShapeInfo {
+                id: a.id,
+                name: a.name.clone(),
+                kind: "autoshape",
+                placeholder,
+                bounds,
+                text: a.text_body.as_ref().map(text_body_to_string),
+                fill: a.properties.fill.as_ref().map(fill_to_css),
+                line: a.properties.line.as_ref().map(line_info),
+                runs: a
+                    .text_body
+                    .as_ref()
+                    .map(|tb| flatten_runs(tb, default_size))
+                    .unwrap_or_default(),
+                pic: None,
+                children: None,
+            }
+        }
         Shape::Picture(p) => ShapeInfo {
             id: p.id,
             name: p.name.clone(),
@@ -311,10 +352,12 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
             children: None,
         },
         Shape::Group(g) => {
+            // Placeholders only inherit from the layout/master at the
+            // top level of a slide, so nested shapes resolve without the table.
             let children = g
                 .shapes
                 .iter()
-                .map(|s| shape_info(s, &ctx.nested(g)))
+                .map(|s| shape_info(s, &ctx.nested(g), None))
                 .collect();
             ShapeInfo {
                 id: g.id,
@@ -425,7 +468,7 @@ fn placeholder_token(kind: &PlaceholderKind) -> &'static str {
     }
 }
 
-fn flatten_runs(tb: &TextBody) -> Vec<TextRunInfo> {
+fn flatten_runs(tb: &TextBody, default_size_100ths_pt: Option<i32>) -> Vec<TextRunInfo> {
     let default_props = TextRunProperties::new();
     let mut runs = Vec::new();
     for (para_idx, para) in tb.paragraphs.iter().enumerate() {
@@ -442,7 +485,7 @@ fn flatten_runs(tb: &TextBody) -> Vec<TextRunInfo> {
                 }
                 TextRun::Field { cached_text, properties, .. } => (cached_text.as_str(), properties),
             };
-            runs.push(run_info(para_idx, alignment.clone(), text, properties));
+            runs.push(run_info(para_idx, alignment.clone(), text, properties, default_size_100ths_pt));
         }
     }
     runs
@@ -453,13 +496,17 @@ fn run_info(
     alignment: Option<String>,
     text: &str,
     p: &TextRunProperties,
+    default_size_100ths_pt: Option<i32>,
 ) -> TextRunInfo {
     TextRunInfo {
         paragraph,
         text: text.to_string(),
         bold: p.bold,
         italic: p.italic,
-        font_size_pt: p.font_size_100ths_point.map(|sz| sz as f64 / 100.0),
+        font_size_pt: p
+            .font_size_100ths_point
+            .or(default_size_100ths_pt)
+            .map(|sz| sz as f64 / 100.0),
         font_family: p.font_family.clone(),
         color: p.fill.as_ref().map(fill_to_css),
         alignment,
