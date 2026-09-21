@@ -37,11 +37,11 @@
 - [x] Add `add_blank_slide(index)` and `delete_slide(index)` with filmstrip drag/reorder controls.
 - [x] Connect Tauri frontend text editing events to core mutation commands.
 
-## Milestone 6: Image Extraction & Multi-Vendor Corpus Testing
-- [ ] Support `<p:pic>` shape extraction and map embedded media relationships (`ppt/media/*`).
-- [ ] Render embedded slide pictures inside the Tauri slide canvas.
-- [ ] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote.
-- [ ] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors.
+## Milestone 6: Image Extraction & Multi-Vendor Corpus Testing (Complete)
+- [x] Support `<p:pic>` shape extraction and map embedded media relationships (`ppt/media/*`).
+- [x] Render embedded slide pictures inside the Tauri slide canvas. (Editor canvas, filmstrip thumbnails, presenter console and audience window; `ShapeInfo.pic` carries format + data URI, e2e-verified under Xvfb.)
+- [x] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote. (8 Apache-2.0 Apache POI fixtures: M365 PowerPoint 2007–2016 Windows + macOS, LibreOffice 5–25; no public corpus carries genuine Google Slides/Keynote exports — gap documented in `tests/fixtures/README.md`, tracked under Stretch. Two SmartArt/OLE fixtures pinned as `KNOWN_REJECTIONS` with a stable non-panicking error contract.)
+- [x] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors. (6 cases in `tests/corrupt.rs`: empty file, garbage bytes, truncated zip, missing `[Content_Types].xml`, invalid content-types XML, corrupted slide XML.)
 
 ## Milestone 7: Presenter Stage Tools & Export Engine (PDF & Web)
 - [ ] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement.
@@ -66,3 +66,9 @@
 - [ ] Implement secondary display routing for AirPlay / external screens via `UIScreen` / `UIWindowScene` (dedicated audience window, avoiding simple mirroring).
 - [ ] Support Split View / Slide Over multitasking with live AirPlay slide presentation.
 - [ ] Background AirPlay video stream mode allowing complete app minimization while keeping audience slides active.
+
+## Stretch: office-toolkit reader gaps & vendor coverage (tracked, not blocking)
+
+- [ ] SmartArt diagrams: office-toolkit mis-parses `dgm:relIds` (diagram parts) as chart relationships and rejects the package. Fix upstream (or vendor + patch) so SmartArt slides open; then promote `m365_smartart.bin` from `KNOWN_REJECTIONS` to `FIXTURES`.
+- [ ] Legacy OLE objects / `mc:AlternateContent`: same rejection path (see `m365_bug64693.bin`). Model or gracefully skip `p:oleObj` so the rest of the slide still renders.
+- [ ] Genuine Google Slides and Keynote export fixtures: requires licensed/first-party sample decks (no public corpus found); add once available.

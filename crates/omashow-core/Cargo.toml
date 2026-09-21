@@ -9,3 +9,7 @@ opc-ooxml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "1"
+base64 = "0.22"
+
+[dev-dependencies]
+zip = "8"

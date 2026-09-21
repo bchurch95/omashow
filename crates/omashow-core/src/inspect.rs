@@ -5,12 +5,15 @@
 //! Everything here is derived from the in-memory [`Presentation`]; nothing in
 //! this module mutates or re-serializes the deck.
 
+use base64::Engine as _;
 use serde::Serialize;
 
 use office_toolkit::drawing::{
     Color, Fill, Line, TextAlign, TextBody, TextRun, TextRunProperties,
 };
-use office_toolkit::powerpoint::{EMU_PER_INCH, PlaceholderKind, Presentation, Shape, ShapeGroup};
+use office_toolkit::powerpoint::{
+    EMU_PER_INCH, PlaceholderKind, Picture, PictureFormat, Presentation, Shape, ShapeGroup,
+};
 
 use crate::error::Error;
 use crate::model::text_body_to_string;
@@ -84,6 +87,18 @@ pub struct LineInfo {
     pub color: Option<String>,
 }
 
+/// Embedded image data of a picture shape, resolved from the deck's media
+/// parts (`ppt/media/*`) through the shape's `r:embed` relationship.
+#[derive(Debug, Clone, Serialize)]
+pub struct PicInfo {
+    /// Image format: "png", "jpeg", "gif", or "bmp".
+    pub format: &'static str,
+    /// The raw image bytes as a `data:` URI, ready for an `<img src>`.
+    pub data_uri: String,
+    /// Size of the raw image in bytes.
+    pub size_bytes: usize,
+}
+
 /// Serializable view of one shape. For a group, `children` holds the nested
 /// shapes with their bounds already remapped out of the group's child
 /// coordinate space into slide coordinates.
@@ -110,6 +125,9 @@ pub struct ShapeInfo {
     pub line: Option<LineInfo>,
     /// Text runs in document order.
     pub runs: Vec<TextRunInfo>,
+    /// Embedded image data, only for a `picture` shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pic: Option<PicInfo>,
     /// Nested shapes, only for a group.
     pub children: Option<Vec<ShapeInfo>>,
 }
@@ -245,6 +263,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 .as_ref()
                 .map(flatten_runs)
                 .unwrap_or_default(),
+            pic: None,
             children: None,
         },
         Shape::Picture(p) => ShapeInfo {
@@ -270,6 +289,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 .and_then(|sp| sp.line.as_ref())
                 .map(line_info),
             runs: Vec::new(),
+            pic: Some(pic_info(p)),
             children: None,
         },
         Shape::Chart(c) => ShapeInfo {
@@ -287,6 +307,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
             fill: None,
             line: None,
             runs: Vec::new(),
+            pic: None,
             children: None,
         },
         Shape::Group(g) => {
@@ -310,6 +331,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
                 fill: None,
                 line: None,
                 runs: Vec::new(),
+                pic: None,
                 children: Some(children),
             }
         }
@@ -330,6 +352,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
             fill: c.properties.fill.as_ref().map(fill_to_css),
             line: c.properties.line.as_ref().map(line_info),
             runs: Vec::new(),
+            pic: None,
             children: None,
         },
         Shape::Table(t) => ShapeInfo {
@@ -347,6 +370,7 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
             fill: None,
             line: None,
             runs: Vec::new(),
+            pic: None,
             children: None,
         },
         Shape::Media(m) => ShapeInfo {
@@ -364,8 +388,24 @@ fn shape_info(shape: &Shape, ctx: &GroupContext) -> ShapeInfo {
             fill: None,
             line: None,
             runs: Vec::new(),
+            pic: None,
             children: None,
         },
+    }
+}
+
+fn pic_info(p: &Picture) -> PicInfo {
+    let format = match p.format {
+        PictureFormat::Png => "png",
+        PictureFormat::Jpeg => "jpeg",
+        PictureFormat::Gif => "gif",
+        PictureFormat::Bmp => "bmp",
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&p.data);
+    PicInfo {
+        format,
+        data_uri: format!("data:image/{format};base64,{b64}"),
+        size_bytes: p.data.len(),
     }
 }
 

@@ -367,3 +367,59 @@ fn slide_shapes_serialize_to_json() {
     assert_eq!(children[0]["bounds"]["width_emu"], 200); // 100 * 2
     assert!(children[0]["text"].is_null());
 }
+
+/// Picture shapes carry the embedded media bytes: the data URI must
+/// roundtrip through the PPTX media parts (`ppt/media/*`), and the
+/// python-pptx-built real fixture must come back byte-for-byte.
+#[test]
+fn picture_media_data_roundtrips() {
+    use base64::Engine as _;
+    let png = [
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+        8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 100, 96,
+        248, 95, 15, 0, 2, 135, 1, 128, 235, 71, 186, 146, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66,
+        96, 130,
+    ];
+
+    // In-memory fixture: a 3-byte "png" payload.
+    let shapes = get_slide_shapes(&fixture_deck(), 0).expect("fixture shapes");
+    let pic = shapes
+        .iter()
+        .find(|s| s.kind == "picture")
+        .expect("fixture picture");
+    let info = pic.pic.as_ref().expect("picture carries media data");
+    assert_eq!(info.format, "png");
+    assert_eq!(info.size_bytes, 3);
+    let b64 = info
+        .data_uri
+        .strip_prefix("data:image/png;base64,")
+        .expect("png data URI");
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .expect("base64"),
+        [0u8; 3]
+    );
+
+    // Real fixture: slide 3 carries the PNG embedded by python-pptx.
+    let doc = PptxDocument::open("/tmp/omashow-rt/real.pptx").expect("fixture opens");
+    let shapes = doc.get_slide_shapes(2).expect("slide 3 shapes");
+    let pic = shapes
+        .iter()
+        .find(|s| s.kind == "picture")
+        .expect("embedded picture");
+    let info = pic.pic.as_ref().expect("media data");
+    assert_eq!(info.format, "png");
+    assert_eq!(info.size_bytes, png.len());
+    let b64 = info
+        .data_uri
+        .strip_prefix("data:image/png;base64,")
+        .expect("png data URI");
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .expect("base64"),
+        png,
+        "embedded media must roundtrip byte-for-byte"
+    );
+}

@@ -22,6 +22,12 @@ function drawShapes(container, shapes, pxPerEmu, pxPerInch, mini) {
       const pic = document.createElement("div");
       pic.className = "slide-pic";
       place(pic, sh.bounds, pxPerEmu);
+      if (sh.pic && sh.pic.data_uri) {
+        const img = document.createElement("img");
+        img.src = sh.pic.data_uri;
+        img.alt = sh.name || "";
+        pic.appendChild(img);
+      }
       container.appendChild(pic);
       continue;
     }
