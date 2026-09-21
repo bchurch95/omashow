@@ -11,6 +11,18 @@
       transition: background 0.15s ease;
     }
     #slide-canvas.blackout { background: #000; }
+    #laser {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      margin: -7px 0 0 -7px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0%, #ff453a 45%, rgba(255,69,58,0) 72%);
+      box-shadow: 0 0 10px 3px rgba(255,69,58,0.8), 0 0 26px 9px rgba(255,69,58,0.35);
+      pointer-events: none;
+      display: none;
+      z-index: 10;
+    }
     .slide-shape {
       position: absolute;
       overflow: hidden;
@@ -40,6 +52,7 @@
 </head>
 <body>
   <div id="slide-canvas"></div>
+  <div id="laser"></div>
   <script src="slide_render.js"></script>
   <script src="audience.js"></script>
 </body>

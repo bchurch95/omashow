@@ -44,7 +44,7 @@
 - [x] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors. (6 cases in `tests/corrupt.rs`: empty file, garbage bytes, truncated zip, missing `[Content_Types].xml`, invalid content-types XML, corrupted slide XML.)
 
 ## Milestone 7: Presenter Stage Tools & Export Engine (PDF & Web)
-- [ ] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement.
+- [x] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement. (Ctrl-hold + console toggle button; dot follows cursor 1:1 in slide space, e2e-verified on Xvfb.)
 - [ ] Live Slide Drawing & Highlighter: Transparent SVG canvas overlay allowing in-show annotation and pen drawing over active slides.
 - [ ] Slide Grid Navigator: Hitting `G` during presentation displays a full-screen thumbnail matrix to jump directly to any slide.
 - [ ] Vector PDF Export: Implement `omashow-cli export-pdf <deck.pptx> <out.pdf>` and a Tauri "Export to PDF" dialog with 1:1 vector precision.

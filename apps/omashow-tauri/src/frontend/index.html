@@ -55,6 +55,7 @@
     #doc-state.edited { color: #f0b429; }
     #doc-state:empty { display: none; }
     #btn-present { margin-left: auto; gap: 6px; font-weight: 600; }
+    #btn-laser.on { color: #ff453a; }
     #content { flex: 1; display: flex; min-height: 0; }
     /* ---------- sidebar ---------- */
     #sidebar {
@@ -544,6 +545,7 @@
       </section>
       <footer id="console-timer">
         <span id="timer-elapsed">00:00</span>
+        <button id="btn-laser" class="icon-btn" title="Laser pointer — hold Ctrl, or toggle here (on while presenting)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="3" fill="currentColor" stroke="none"/><path d="M11.5 12.5 20 4"/><path d="M17 4h3v3"/></svg></button>
         <span id="timer-clock">--:--</span>
       </footer>
     </aside>

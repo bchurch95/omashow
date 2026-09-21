@@ -17,6 +17,8 @@ struct Deck {
 /// load and opens it, so no event can be missed before the webview boots.
 #[derive(Default)]
 struct InitialDeck(Option<String>);
+#[derive(Default)]
+struct CurrentSlide(std::sync::atomic::AtomicUsize);
 
 fn main() {
     let open_path = std::env::args().skip(1).find(|a| !a.starts_with('-'));
@@ -24,6 +26,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(Deck::default()))
         .manage(InitialDeck(open_path))
+        .manage(CurrentSlide::default())
         .invoke_handler(tauri::generate_handler![
             initial_deck_path,
             new_presentation,
@@ -46,6 +49,8 @@ fn main() {
             open_file_dialog,
             save_file_dialog,
             list_monitors,
+            set_current_slide,
+            get_current_slide,
             open_audience_window,
             close_audience_window,
         ])
@@ -60,6 +65,16 @@ fn project(doc: &PptxDocument) -> Result<String, String> {
 #[tauri::command]
 fn initial_deck_path(state: State<'_, InitialDeck>) -> Option<String> {
     state.0.clone()
+}
+
+#[tauri::command]
+fn set_current_slide(state: State<'_, CurrentSlide>, slide: usize) {
+    state.0.store(slide, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn get_current_slide(state: State<'_, CurrentSlide>) -> usize {
+    state.0.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Deck overview returned by `open_presentation`: metadata, the slide list,

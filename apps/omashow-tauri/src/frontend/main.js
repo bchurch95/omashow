@@ -111,6 +111,10 @@ function exitPresent() {
   document.body.classList.remove("presenting");
   document.body.classList.remove("chrome-visible");
   stopTimer();
+  laserTool = false;
+  laserCtrl = false;
+  $("btn-laser").classList.remove("on");
+  emitToAudience("laser-move", { on: false });
   invoke("close_audience_window").catch(() => {});
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
@@ -166,6 +170,36 @@ function toggleBlackout() {
   blackedOut = !blackedOut;
   emitToAudience("blackout-toggle", { on: blackedOut });
 }
+
+// ---------- laser pointer: dot on the audience screen follows the cursor ----------
+// Cursor position is normalized against the #slide-canvas rect (which keeps
+// the slide's aspect ratio), so the audience side can map it back to slide
+// space regardless of its own size.
+let laserTool = false;
+let laserCtrl = false;
+let lastPointer = null;
+function laserActive() { return presenting() && (laserTool || laserCtrl); }
+function sendLaser() {
+  if (!presenting()) return;
+  if (!laserActive() || !lastPointer) {
+    emitToAudience("laser-move", { on: false });
+    return;
+  }
+  const rect = $("slide-canvas").getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const x = Math.min(1, Math.max(0, (lastPointer.x - rect.left) / rect.width));
+  const y = Math.min(1, Math.max(0, (lastPointer.y - rect.top) / rect.height));
+  emitToAudience("laser-move", { on: true, x, y });
+}
+function setLaserTool(on) {
+  laserTool = on;
+  $("btn-laser").classList.toggle("on", on);
+  sendLaser();
+}
+document.addEventListener("pointermove", (e) => {
+  lastPointer = { x: e.clientX, y: e.clientY };
+  sendLaser();
+});
 
 async function startPresentation() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
@@ -392,6 +426,7 @@ function clearSlideCounter() {
 function selectSlide(i) {
   if (i === currentSlide) { updatePreview(); return; }
   currentSlide = i;
+  if (i >= 0) invoke("set_current_slide", { slide: i }).catch(() => {});
   document.querySelectorAll(".slide-item").forEach((el, j) => {
     el.classList.toggle("active", j === i);
   });
@@ -409,6 +444,7 @@ function applyModel(data, selectLast = false) {
   markState("");
   if (selectLast) currentSlide = model.slides.length - 1;
   if (currentSlide >= model.slides.length) currentSlide = model.slides.length - 1;
+  if (currentSlide >= 0) invoke("set_current_slide", { slide: currentSlide }).catch(() => {});
   renderFilmstrip();
   refreshThumbs();
   paintCurrentSlide();
@@ -476,7 +512,8 @@ $("zoom-fit").onclick = () => { setZoom("fit"); syncZoomUI(); };
 $("zoom-100").onclick = () => { setZoom("100"); syncZoomUI(); };
 zoomRange.addEventListener("input", () => { setZoom(zoomRange.value); syncZoomUI(); });
 $("notes-label").onclick = () => $("notes-bar").classList.toggle("collapsed");
-$("btn-present").onclick = enterPresent;
+$("btn-present").onclick = startPresentation;
+$("btn-laser").onclick = () => setLaserTool(!laserTool);
 syncZoomUI();
 const addSlide = () => {
   const idx = Math.max(0, currentSlide + 1);
@@ -620,6 +657,11 @@ document.addEventListener("keydown", (e) => {
     exitPresent();
     return;
   }
+  if (presenting() && e.key === "Control" && !e.repeat) {
+    laserCtrl = true;
+    sendLaser();
+    return;
+  }
   if (e.key === "F5") {
     e.preventDefault();
     if (!presenting()) startPresentation();
@@ -636,6 +678,13 @@ document.addEventListener("keydown", (e) => {
     else if (presenting()) exitPresent();
   } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
     if (currentSlide > 0) selectSlide(currentSlide - 1);
+  }
+});
+
+document.addEventListener("keyup", (e) => {
+  if (presenting() && e.key === "Control") {
+    laserCtrl = false;
+    sendLaser();
   }
 });
 
