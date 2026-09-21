@@ -56,6 +56,19 @@
     #doc-state:empty { display: none; }
     #btn-present { margin-left: auto; gap: 6px; font-weight: 600; }
     #btn-laser.on { color: #ff453a; }
+    #btn-pen.on { color: #7aa2f7; }
+    #btn-marker.on { color: #ffd60a; }
+    #ink-overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      pointer-events: none;
+      display: none;
+    }
+    body.presenting #ink-overlay { display: block; }
+    #ink-overlay.drawing { cursor: crosshair; }
     #content { flex: 1; display: flex; min-height: 0; }
     /* ---------- sidebar ---------- */
     #sidebar {
@@ -244,6 +257,14 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    #console-tools {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    #console-tools .icon-btn:disabled { opacity: 0.35; pointer-events: none; }
     #console-timer {
       display: flex;
       justify-content: space-between;
@@ -509,6 +530,7 @@
     <div id="preview-wrap">
       <div id="slide-canvas">
         <div id="slide-stage"></div>
+        <svg id="ink-overlay" viewBox="0 0 12192000 6858000" preserveAspectRatio="none" aria-hidden="true"><g id="ink-strokes"></g></svg>
         <textarea id="text-edit" spellcheck="false"></textarea>
         <div id="empty-msg" class="empty-state">
           Open a .pptx or create a new deck to begin
@@ -543,9 +565,15 @@
         <h3>Speaker notes</h3>
         <div id="console-notes"></div>
       </section>
+      <footer id="console-tools">
+        <button id="btn-laser" class="icon-btn" title="Laser pointer — hold Ctrl, or toggle here (on while presenting)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="3" fill="currentColor" stroke="none"/><path d="M11.5 12.5 20 4"/><path d="M17 4h3v3"/></svg></button>
+        <button id="btn-pen" class="icon-btn" title="Pen — draw on the slide (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
+        <button id="btn-marker" class="icon-btn" title="Highlighter — draw on the slide (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4l8 8z"/></svg></button>
+        <button id="btn-ink-undo" class="icon-btn" title="Undo last stroke (U)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+        <button id="btn-ink-clear" class="icon-btn" title="Clear all strokes on this slide (C)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+      </footer>
       <footer id="console-timer">
         <span id="timer-elapsed">00:00</span>
-        <button id="btn-laser" class="icon-btn" title="Laser pointer — hold Ctrl, or toggle here (on while presenting)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="3" fill="currentColor" stroke="none"/><path d="M11.5 12.5 20 4"/><path d="M17 4h3v3"/></svg></button>
         <span id="timer-clock">--:--</span>
       </footer>
     </aside>

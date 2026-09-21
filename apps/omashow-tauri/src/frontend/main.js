@@ -114,6 +114,7 @@ function exitPresent() {
   laserTool = false;
   laserCtrl = false;
   $("btn-laser").classList.remove("on");
+  resetInk();
   emitToAudience("laser-move", { on: false });
   invoke("close_audience_window").catch(() => {});
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -178,7 +179,7 @@ function toggleBlackout() {
 let laserTool = false;
 let laserCtrl = false;
 let lastPointer = null;
-function laserActive() { return presenting() && (laserTool || laserCtrl); }
+function laserActive() { return presenting() && !inkTool && (laserTool || laserCtrl); }
 function sendLaser() {
   if (!presenting()) return;
   if (!laserActive() || !lastPointer) {
@@ -200,6 +201,147 @@ document.addEventListener("pointermove", (e) => {
   lastPointer = { x: e.clientX, y: e.clientY };
   sendLaser();
 });
+
+// ---------- live ink: per-slide pen / highlighter strokes ----------
+// Strokes are stored per slide as normalized (0..1) slide-space point pairs.
+// The main window is the source of truth: the audience rebuilds each slide's
+// ink from the slide-changed payload and appends to a live stroke as ink
+// events stream in, so pen strokes appear on both screens in real time.
+const INK_TOOL_STYLE = {
+  pen: { color: "#0f172a", widthFrac: 0.0022, opacity: 1 },
+  marker: { color: "#ffd60a", widthFrac: 0.0085, opacity: 0.45 },
+};
+const inkBySlide = new Map();
+let inkTool = null; // "pen" | "marker" | null
+let liveInk = null; // { tool, pts } while a stroke is in progress
+let liveEl = null;
+let drawing = false;
+
+function inkSvg() { return $("ink-overlay"); }
+function inkGroup() { return $("ink-strokes"); }
+
+function inkNorm(e) {
+  const r = $("slide-canvas").getBoundingClientRect();
+  return {
+    x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+    y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+  };
+}
+
+function inkPointsAttr(pts) {
+  const d = slideDimensions();
+  let s = "";
+  for (let i = 0; i < pts.length; i += 2) {
+    s += (pts[i] * d.width_emu).toFixed(1) + "," + (pts[i + 1] * d.height_emu).toFixed(1) + " ";
+  }
+  return s.trim();
+}
+
+function inkStrokeEl(stroke) {
+  const st = INK_TOOL_STYLE[stroke.tool];
+  const d = slideDimensions();
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  el.setAttribute("fill", "none");
+  el.setAttribute("stroke", st.color);
+  el.setAttribute("stroke-width", (st.widthFrac * d.width_emu).toFixed(0));
+  el.setAttribute("opacity", st.opacity);
+  el.setAttribute("stroke-linecap", "round");
+  el.setAttribute("stroke-linejoin", "round");
+  el.setAttribute("points", inkPointsAttr(stroke.pts));
+  return el;
+}
+
+function syncInkButtons() {
+  const n = (inkBySlide.get(currentSlide) || []).length;
+  $("btn-ink-undo").disabled = n === 0;
+  $("btn-ink-clear").disabled = n === 0;
+}
+
+function renderInkForCurrent() {
+  const d = slideDimensions();
+  inkSvg().setAttribute("viewBox", `0 0 ${d.width_emu} ${d.height_emu}`);
+  const g = inkGroup();
+  g.innerHTML = "";
+  for (const s of inkBySlide.get(currentSlide) || []) g.appendChild(inkStrokeEl(s));
+  syncInkButtons();
+}
+
+function currentInk() {
+  if (!inkBySlide.has(currentSlide)) inkBySlide.set(currentSlide, []);
+  return inkBySlide.get(currentSlide);
+}
+
+function setInkTool(tool) {
+  if (inkTool === tool) tool = null;
+  inkTool = tool;
+  $("btn-pen").classList.toggle("on", inkTool === "pen");
+  $("btn-marker").classList.toggle("on", inkTool === "marker");
+  const svg = inkSvg();
+  svg.style.pointerEvents = inkTool ? "all" : "none";
+  svg.classList.toggle("drawing", !!inkTool);
+  if (inkTool) laserCtrl = false;
+  sendLaser();
+}
+
+function endInkStroke() {
+  if (!drawing) return;
+  drawing = false;
+  currentInk().push(liveInk);
+  liveInk = null;
+  liveEl = null;
+  renderInkForCurrent();
+  emitToAudience("ink", { op: "end" });
+}
+
+function inkUndo() {
+  const list = currentInk();
+  if (!list.length) return;
+  list.pop();
+  renderInkForCurrent();
+  emitToAudience("ink", { op: "undo" });
+}
+
+function inkClear() {
+  inkBySlide.delete(currentSlide);
+  renderInkForCurrent();
+  emitToAudience("ink", { op: "clear" });
+}
+
+function resetInk() {
+  endInkStroke();
+  inkBySlide.clear();
+  liveInk = null;
+  liveEl = null;
+  if (inkTool) setInkTool(inkTool);
+  renderInkForCurrent();
+}
+
+inkSvg().addEventListener("pointerdown", (e) => {
+  if (!presenting() || !inkTool) return;
+  e.preventDefault();
+  inkSvg().setPointerCapture(e.pointerId);
+  const p = inkNorm(e);
+  drawing = true;
+  liveInk = { tool: inkTool, pts: [p.x, p.y] };
+  liveEl = inkStrokeEl(liveInk);
+  inkGroup().appendChild(liveEl);
+  emitToAudience("ink", { op: "begin", tool: inkTool });
+  emitToAudience("ink", { op: "point", x: p.x, y: p.y });
+});
+inkSvg().addEventListener("pointermove", (e) => {
+  if (!drawing || !liveInk) return;
+  const p = inkNorm(e);
+  liveInk.pts.push(p.x, p.y);
+  liveEl.setAttribute("points", inkPointsAttr(liveInk.pts));
+  emitToAudience("ink", { op: "point", x: p.x, y: p.y });
+});
+inkSvg().addEventListener("pointerup", endInkStroke);
+inkSvg().addEventListener("pointercancel", endInkStroke);
+
+$("btn-pen").onclick = () => setInkTool("pen");
+$("btn-marker").onclick = () => setInkTool("marker");
+$("btn-ink-undo").onclick = inkUndo;
+$("btn-ink-clear").onclick = inkClear;
 
 async function startPresentation() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
@@ -425,6 +567,7 @@ function clearSlideCounter() {
 
 function selectSlide(i) {
   if (i === currentSlide) { updatePreview(); return; }
+  if (drawing) endInkStroke();
   currentSlide = i;
   if (i >= 0) invoke("set_current_slide", { slide: i }).catch(() => {});
   document.querySelectorAll(".slide-item").forEach((el, j) => {
@@ -435,7 +578,8 @@ function selectSlide(i) {
   paintCurrentSlide();
   updatePreview();
   updateConsole();
-  emitToAudience("slide-changed", { index: i });
+  renderInkForCurrent();
+  emitToAudience("slide-changed", { index: i, ink: inkBySlide.get(i) || [] });
 }
 
 function applyModel(data, selectLast = false) {
@@ -453,6 +597,7 @@ function applyModel(data, selectLast = false) {
   updateConsole();
   hasDeck();
   refreshUndoUI();
+  resetInk();
 }
 
 // ---------- actions ----------
@@ -670,6 +815,26 @@ document.addEventListener("keydown", (e) => {
   if (presenting() && e.key.toLowerCase() === "b") {
     e.preventDefault();
     toggleBlackout();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "d") {
+    e.preventDefault();
+    setInkTool("pen");
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "m") {
+    e.preventDefault();
+    setInkTool("marker");
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "u") {
+    e.preventDefault();
+    inkUndo();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    inkClear();
     return;
   }
   if (!model) return;

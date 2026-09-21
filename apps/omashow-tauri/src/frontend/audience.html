@@ -11,6 +11,15 @@
       transition: background 0.15s ease;
     }
     #slide-canvas.blackout { background: #000; }
+    #ink-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
     #laser {
       position: absolute;
       width: 14px;
@@ -52,6 +61,7 @@
 </head>
 <body>
   <div id="slide-canvas"></div>
+  <svg id="ink-overlay" viewBox="0 0 12192000 6858000" preserveAspectRatio="none" aria-hidden="true"><g id="ink-strokes"></g></svg>
   <div id="laser"></div>
   <script src="slide_render.js"></script>
   <script src="audience.js"></script>
