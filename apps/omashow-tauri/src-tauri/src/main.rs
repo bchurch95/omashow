@@ -357,10 +357,11 @@ fn list_monitors(app: tauri::AppHandle) -> Result<Vec<MonitorInfo>, String> {
         .collect())
 }
 
-/// Opens a borderless, fullscreen audience window on `monitor_name`, or on the
-/// first non-primary monitor when none is given. The window is non-minimizing,
-/// non-maximizing, and non-resizable, so focus changes on the primary monitor
-/// never hide or move it while the presenter multitasks in the console.
+/// Opens an audience projection window. When a secondary monitor exists (or is
+/// explicitly requested), the window is borderless, fullscreen, and always on top,
+/// so focus changes on the primary monitor never hide or move it while the
+/// presenter multitasks in the console. On a single display (e.g. testing locally),
+/// it opens as a floating, decorated preview window so both views are visible.
 #[tauri::command]
 fn open_audience_window(app: tauri::AppHandle, monitor_name: Option<String>) -> Result<String, String> {
     if let Some(existing) = app.get_webview_window(AUDIENCE_LABEL) {
@@ -385,20 +386,46 @@ fn open_audience_window(app: tauri::AppHandle, monitor_name: Option<String>) -> 
         }
     })?;
     let monitor = &monitors[index];
+    let is_primary = specs[index].1;
     let scale = monitor.scale_factor();
     let size = *monitor.size();
     let pos = *monitor.position();
-    WebviewWindowBuilder::new(&app, AUDIENCE_LABEL, tauri::WebviewUrl::App("audience.html".into()))
-        .title("Omashow — Audience")
-        .position(pos.x as f64 / scale, pos.y as f64 / scale)
-        .inner_size(size.width as f64 / scale, size.height as f64 / scale)
-        .decorations(false)
-        .fullscreen(true)
-        .minimizable(false)
-        .maximizable(false)
-        .resizable(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+
+    let builder = WebviewWindowBuilder::new(&app, AUDIENCE_LABEL, tauri::WebviewUrl::App("audience.html".into()));
+
+    if !is_primary {
+        builder
+            .title("Omashow — Audience")
+            .position(pos.x as f64 / scale, pos.y as f64 / scale)
+            .inner_size(size.width as f64 / scale, size.height as f64 / scale)
+            .decorations(false)
+            .fullscreen(true)
+            .minimizable(false)
+            .maximizable(false)
+            .resizable(false)
+            .always_on_top(true)
+            .build()
+            .map_err(|e| e.to_string())?;
+    } else {
+        let preview_w = (size.width as f64 / scale * 0.65).min(960.0).max(480.0);
+        let preview_h = (preview_w * 9.0 / 16.0).round();
+        builder
+            .title("Omashow — Audience Preview")
+            .inner_size(preview_w, preview_h)
+            .decorations(true)
+            .fullscreen(false)
+            .minimizable(true)
+            .maximizable(true)
+            .resizable(true)
+            .always_on_top(true)
+            .build()
+            .map_err(|e| e.to_string())?;
+    }
+
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.set_focus();
+    }
+
     Ok(monitor.name().cloned().unwrap_or_default())
 }
 

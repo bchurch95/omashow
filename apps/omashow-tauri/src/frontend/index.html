@@ -246,13 +246,28 @@
     #console-timer {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
       padding-top: 12px;
       border-top: 1px solid var(--border);
       font-variant-numeric: tabular-nums;
     }
-    #timer-elapsed { font-size: 22px; font-weight: 650; color: #edf1f7; }
+    #timer-elapsed { font-size: 20px; font-weight: 650; color: #edf1f7; }
     #timer-clock { font-size: 13px; color: #9aa3b8; }
+    #btn-end-show {
+      background: rgba(247, 118, 142, 0.15);
+      border: 1px solid rgba(247, 118, 142, 0.35);
+      color: #f7768e;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    #btn-end-show:hover {
+      background: #f7768e;
+      color: #0f1117;
+    }
     #slide-canvas {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -536,6 +551,7 @@
       <footer id="console-timer">
         <span id="timer-elapsed">00:00</span>
         <span id="timer-clock">--:--</span>
+        <button id="btn-end-show" title="End presentation (Esc)">End Show</button>
       </footer>
     </aside>
   </div>

@@ -2,17 +2,50 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <title>Omashow — Audience</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: none;
+    }
+    body.show-cursor {
+      cursor: default;
+    }
     #slide-canvas {
-      position: absolute;
-      inset: 0;
+      position: relative;
       background: #fff;
+      overflow: hidden;
+      box-shadow: 0 0 32px rgba(0, 0, 0, 0.9);
       transition: background 0.15s ease;
     }
-    #slide-canvas.blackout { background: #000; }
+    #slide-canvas.blackout { background: #000 !important; }
     #slide-canvas.blackout .slide-shape,
-    #slide-canvas.blackout .slide-pic { visibility: hidden; }
+    #slide-canvas.blackout .slide-pic { visibility: hidden !important; }
+    .slide-shape {
+      position: absolute;
+      overflow: hidden;
+      padding: 2px 4px;
+      line-height: 1.2;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #1f2430;
+      font-family: system-ui, sans-serif;
+    }
+    .slide-pic {
+      position: absolute;
+      background: rgba(122,162,247,0.10);
+      border: 1px dashed rgba(122,162,247,0.40);
+    }
   </style>
 </head>
 <body>

@@ -101,8 +101,6 @@ let presentHideTimer = null;
 function enterPresent() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
   document.body.classList.add("presenting");
-  const host = $("main");
-  if (host.requestFullscreen) host.requestFullscreen().catch(() => {});
   paintCurrentSlide();
   updateConsole();
   startTimer();
@@ -112,7 +110,6 @@ function exitPresent() {
   document.body.classList.remove("chrome-visible");
   stopTimer();
   invoke("close_audience_window").catch(() => {});
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
 // ---------- presenter console: next slide, notes, timer ----------
@@ -172,12 +169,26 @@ async function startPresentation() {
   enterPresent();
   try {
     const name = await invoke("open_audience_window", { monitorName: null });
-    flash("audience window on " + name);
-  } catch (e) { flash(String(e), "err"); }
+    flash("projecting on " + name);
+    emitToAudience("slide-changed", { index: currentSlide });
+    setTimeout(() => emitToAudience("slide-changed", { index: currentSlide }), 200);
+    setTimeout(() => emitToAudience("slide-changed", { index: currentSlide }), 600);
+  } catch (e) {
+    flash(String(e), "err");
+  }
 }
 
 if (window.__TAURI__ && window.__TAURI__.event) {
   window.__TAURI__.event.listen("present-exit", () => exitPresent()).catch(() => {});
+  window.__TAURI__.event.listen("audience-ready", () => {
+    if (currentSlide >= 0) emitToAudience("slide-changed", { index: currentSlide });
+  }).catch(() => {});
+  window.__TAURI__.event.listen("present-next", () => {
+    if (model && currentSlide < model.slides.length - 1) selectSlide(currentSlide + 1);
+  }).catch(() => {});
+  window.__TAURI__.event.listen("present-prev", () => {
+    if (model && currentSlide > 0) selectSlide(currentSlide - 1);
+  }).catch(() => {});
 }
 function nudgePresentChrome() {
   if (!presenting()) return;
@@ -185,12 +196,6 @@ function nudgePresentChrome() {
   clearTimeout(presentHideTimer);
   presentHideTimer = setTimeout(() => document.body.classList.remove("chrome-visible"), 2200);
 }
-document.addEventListener("fullscreenchange", () => {
-  if (!document.fullscreenElement) {
-    document.body.classList.remove("presenting");
-    document.body.classList.remove("chrome-visible");
-  }
-});
 document.addEventListener("mousemove", nudgePresentChrome);
 $("slide-canvas").addEventListener("click", () => {
   if (!presenting()) return;
@@ -476,7 +481,9 @@ $("zoom-fit").onclick = () => { setZoom("fit"); syncZoomUI(); };
 $("zoom-100").onclick = () => { setZoom("100"); syncZoomUI(); };
 zoomRange.addEventListener("input", () => { setZoom(zoomRange.value); syncZoomUI(); });
 $("notes-label").onclick = () => $("notes-bar").classList.toggle("collapsed");
-$("btn-present").onclick = enterPresent;
+$("btn-present").onclick = startPresentation;
+const btnEnd = $("btn-end-show");
+if (btnEnd) btnEnd.onclick = exitPresent;
 syncZoomUI();
 const addSlide = () => {
   const idx = Math.max(0, currentSlide + 1);
