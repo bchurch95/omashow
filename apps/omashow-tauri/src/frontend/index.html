@@ -489,6 +489,89 @@
     body.presenting #slide-canvas { border: none; border-radius: 0; box-shadow: none; }
     body.presenting #main { flex-direction: row; }
     body.presenting #console-side { display: flex; }
+    /* ---------- slide grid navigator (G while presenting) ---------- */
+    #slide-grid {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      background: rgba(13, 15, 21, 0.97);
+      padding: 16px 22px 20px;
+    }
+    body.presenting.grid-open #slide-grid { display: flex; }
+    #grid-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+      flex-shrink: 0;
+    }
+    #grid-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #d0d8e6;
+    }
+    #grid-hint { font-size: 12px; color: #9aa3b8; }
+    #grid-cells {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 14px;
+      overflow-y: auto;
+      align-content: start;
+      padding: 2px;
+    }
+    .grid-cell {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 8px 7px;
+      cursor: pointer;
+      transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+    }
+    .grid-cell:hover { border-color: #3a445c; transform: translateY(-2px); }
+    .grid-cell.current {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(122, 162, 247, 0.18);
+    }
+    .grid-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #fff;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .grid-num {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: rgba(15, 17, 23, 0.78);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .grid-cell.current .grid-num { background: var(--accent); color: #0f1117; }
+    .grid-label {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #9aa3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     #status .ok { color: var(--green); }
     #status .err { color: var(--danger); }
     .vdiv { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; }
@@ -566,6 +649,7 @@
         <div id="console-notes"></div>
       </section>
       <footer id="console-tools">
+        <button id="btn-grid" class="icon-btn" title="Slide grid — jump to any slide (G)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
         <button id="btn-laser" class="icon-btn" title="Laser pointer — hold Ctrl, or toggle here (on while presenting)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="3" fill="currentColor" stroke="none"/><path d="M11.5 12.5 20 4"/><path d="M17 4h3v3"/></svg></button>
         <button id="btn-pen" class="icon-btn" title="Pen — draw on the slide (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
         <button id="btn-marker" class="icon-btn" title="Highlighter — draw on the slide (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4l8 8z"/></svg></button>
@@ -577,6 +661,13 @@
         <span id="timer-clock">--:--</span>
       </footer>
     </aside>
+    <div id="slide-grid" aria-hidden="true">
+      <header id="grid-header">
+        <span id="grid-title">Jump to slide</span>
+        <span id="grid-hint">click a slide to jump · G or Esc to close</span>
+      </header>
+      <div id="grid-cells"></div>
+    </div>
   </div>
 
   <aside id="inspector">

@@ -46,7 +46,7 @@
 ## Milestone 7: Presenter Stage Tools & Export Engine (PDF & Web)
 - [x] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement. (Ctrl-hold + console toggle button; dot follows cursor 1:1 in slide space, e2e-verified on Xvfb.)
 - [x] Live Slide Drawing & Highlighter: Transparent SVG overlay for in-show pen/marker annotation over active slides (per-slide ink storage, undo/clear, `D`/`M`/`U`/`C` shortcuts, live sync to audience). E2e-pixel-verified on Xvfb. Also fixed placeholder geometry inheritance (slide→layout→master) so python-pptx decks no longer render blank.
-- [ ] Slide Grid Navigator: Hitting `G` during presentation displays a full-screen thumbnail matrix to jump directly to any slide.
+- [x] Slide Grid Navigator: Hitting `G` during presentation displays a full-screen thumbnail matrix to jump directly to any slide. (G toggles, Esc closes then exits, footer button; thumbnails render live slide content with number badges + title labels, current slide highlighted, click jumps and syncs to audience. E2e-pixel-verified on Xvfb.)
 - [ ] Vector PDF Export: Implement `omashow-cli export-pdf <deck.pptx> <out.pdf>` and a Tauri "Export to PDF" dialog with 1:1 vector precision.
 - [ ] Standalone HTML5 Bundle Export: Export presentation as an offline, single-file HTML presentation viewable in any browser.
 

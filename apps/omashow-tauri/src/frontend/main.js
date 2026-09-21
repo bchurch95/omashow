@@ -120,6 +120,48 @@ function exitPresent() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
+// ---------- slide grid navigator: G while presenting ----------
+function gridOpen() { return document.body.classList.contains("grid-open"); }
+function closeSlideGrid() { document.body.classList.remove("grid-open"); }
+function openSlideGrid() {
+  if (!model || !presenting()) return;
+  const cells = $("grid-cells");
+  cells.innerHTML = "";
+  model.slides.forEach((s, i) => {
+    const cell = document.createElement("div");
+    cell.className = "grid-cell" + (i === currentSlide ? " current" : "");
+
+    const thumb = document.createElement("div");
+    thumb.className = "grid-thumb";
+    const num = document.createElement("span");
+    num.className = "grid-num";
+    num.textContent = i + 1;
+    const label = document.createElement("div");
+    label.className = "grid-label";
+    label.textContent = s.title || "";
+    label.title = s.title || "";
+    cell.append(thumb, num, label);
+
+    cell.addEventListener("click", () => {
+      closeSlideGrid();
+      selectSlide(i);
+    });
+    cells.appendChild(cell);
+  });
+  document.body.classList.add("grid-open");
+  model.slides.forEach((_, i) => {
+    const thumb = document.querySelectorAll("#grid-cells .grid-thumb")[i];
+    const cached = slideContents.get(i);
+    if (cached && thumb) renderSlideInto(thumb, cached, true);
+    else fetchSlideContent(i);
+  });
+}
+function toggleSlideGrid() {
+  if (!presenting()) return;
+  if (gridOpen()) closeSlideGrid();
+  else openSlideGrid();
+}
+
 // ---------- presenter console: next slide, notes, timer ----------
 let presentStart = 0;
 let timerInt = null;
@@ -338,6 +380,7 @@ inkSvg().addEventListener("pointermove", (e) => {
 inkSvg().addEventListener("pointerup", endInkStroke);
 inkSvg().addEventListener("pointercancel", endInkStroke);
 
+$("btn-grid").onclick = toggleSlideGrid;
 $("btn-pen").onclick = () => setInkTool("pen");
 $("btn-marker").onclick = () => setInkTool("marker");
 $("btn-ink-undo").onclick = inkUndo;
@@ -394,6 +437,8 @@ function refreshThumbs() {
 function paintSlide(i, content) {
   const item = document.querySelectorAll(".slide-item")[i];
   if (item) renderSlideInto(item.querySelector(".slide-thumb"), content, true);
+  const gridThumb = document.querySelectorAll("#grid-cells .grid-thumb")[i];
+  if (gridThumb) renderSlideInto(gridThumb, content, true);
   if (i === currentSlide) {
     fitCanvas();
     renderSlideInto($("slide-stage"), content, false);
@@ -572,6 +617,9 @@ function selectSlide(i) {
   if (i >= 0) invoke("set_current_slide", { slide: i }).catch(() => {});
   document.querySelectorAll(".slide-item").forEach((el, j) => {
     el.classList.toggle("active", j === i);
+  });
+  document.querySelectorAll("#grid-cells .grid-cell").forEach((el, j) => {
+    el.classList.toggle("current", j === i);
   });
   const active = document.querySelectorAll(".slide-item")[i];
   if (active) active.scrollIntoView({ block: "nearest" });
@@ -797,7 +845,13 @@ document.addEventListener("keydown", (e) => {
     }
   }
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
-  if (presenting() && (e.key === "Escape" || e.key.toLowerCase() === "q")) {
+  if (presenting() && e.key === "Escape") {
+    e.preventDefault();
+    if (gridOpen()) closeSlideGrid();
+    else exitPresent();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "q") {
     e.preventDefault();
     exitPresent();
     return;
@@ -815,6 +869,11 @@ document.addEventListener("keydown", (e) => {
   if (presenting() && e.key.toLowerCase() === "b") {
     e.preventDefault();
     toggleBlackout();
+    return;
+  }
+  if (presenting() && e.key.toLowerCase() === "g") {
+    e.preventDefault();
+    toggleSlideGrid();
     return;
   }
   if (presenting() && e.key.toLowerCase() === "d") {
