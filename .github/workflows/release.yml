@@ -56,9 +56,11 @@ jobs:
           name: Omashow-macOS
           path: artifacts/*
 
-      - name: Create GitHub Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create or Update Public GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Omashow macOS Latest Build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: artifacts/*
           generate_release_notes: true
