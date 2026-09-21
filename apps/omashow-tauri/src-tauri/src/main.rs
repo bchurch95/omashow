@@ -276,25 +276,33 @@ fn undo_state(state: State<'_, Mutex<Deck>>) -> Result<UndoState, String> {
 }
 
 #[tauri::command]
-fn open_file_dialog(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
-    let file = app_handle
+async fn open_file_dialog(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (tx, mut rx) = tauri::async_runtime::channel(1);
+    app_handle
         .dialog()
         .file()
         .set_title("Open Presentation")
         .add_filter("PowerPoint", &["pptx"])
-        .blocking_pick_file();
-    Ok(file.map(|p| p.as_path().unwrap().to_string_lossy().to_string()))
+        .pick_file(move |file| {
+            let _ = tx.try_send(file);
+        });
+    let file = rx.recv().await.flatten();
+    Ok(file.and_then(|p| p.as_path().map(|path| path.to_string_lossy().to_string())))
 }
 
 #[tauri::command]
-fn save_file_dialog(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
-    let file = app_handle
+async fn save_file_dialog(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (tx, mut rx) = tauri::async_runtime::channel(1);
+    app_handle
         .dialog()
         .file()
         .set_title("Save Presentation")
         .add_filter("PowerPoint", &["pptx"])
-        .blocking_save_file();
-    Ok(file.map(|p| p.as_path().unwrap().to_string_lossy().to_string()))
+        .save_file(move |file| {
+            let _ = tx.try_send(file);
+        });
+    let file = rx.recv().await.flatten();
+    Ok(file.and_then(|p| p.as_path().map(|path| path.to_string_lossy().to_string())))
 }
 
 const AUDIENCE_LABEL: &str = "audience";
