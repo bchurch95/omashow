@@ -1,4 +1,4 @@
-name: Build & Release macOS App
+name: Build & Release App
 
 on:
   workflow_dispatch:
@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-macos:
+    name: macOS (.dmg & .app)
     runs-on: macos-latest
     permissions:
       contents: write
@@ -50,17 +51,65 @@ jobs:
             cd "$GITHUB_WORKSPACE"
           fi
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Omashow-macOS
-          path: artifacts/*
-
-      - name: Create or Update Public GitHub Release
+      - name: Upload macOS Artifacts
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Omashow macOS Latest Build' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Omashow Latest Build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          files: artifacts/*
+          generate_release_notes: true
+
+  build-linux:
+    name: Linux (.AppImage & .deb)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build targets
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/omashow-core
+            crates/omashow-cli
+            apps/omashow-tauri/src-tauri
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0"
+
+      - name: Build Linux AppImage & DEB
+        working-directory: apps/omashow-tauri
+        run: |
+          cargo tauri build --bundles appimage,deb
+
+      - name: Prepare build artifacts
+        run: |
+          mkdir -p artifacts
+          BUNDLE_DIR="target/release/bundle"
+          if [ -d "$BUNDLE_DIR/appimage" ]; then
+            cp $BUNDLE_DIR/appimage/*.AppImage artifacts/ || true
+          fi
+          if [ -d "$BUNDLE_DIR/deb" ]; then
+            cp $BUNDLE_DIR/deb/*.deb artifacts/ || true
+          fi
+
+      - name: Upload Linux Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Omashow Latest Build' }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: artifacts/*
           generate_release_notes: true
