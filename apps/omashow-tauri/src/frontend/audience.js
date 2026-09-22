@@ -118,8 +118,13 @@ events.listen("ink", (e) => {
   }
 });
 
-events.listen("blackout-toggle", (e) => {
-  canvas.classList.toggle("blackout", !!e.payload.on);
+// Screen shutter from the presenter console: "black", "white" or "clear".
+// The console holds the event while frozen, so the audience keeps the last
+// projected frame.
+events.listen("shutter", (e) => {
+  const mode = e.payload && e.payload.mode;
+  canvas.classList.toggle("blackout", mode === "black");
+  canvas.classList.toggle("whiteout", mode === "white");
 });
 
 events.listen("present-exit", () => {

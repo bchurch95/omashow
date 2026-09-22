@@ -53,7 +53,7 @@
 ## Milestone 8: Official OmaShow UI Suite & Visual Polish (Matching Video Demo Specs)
 *Reference: `design_spec/OMASHOW_UI_SPEC.md` and screenshots in `design_spec/screenshots/`*
 - [x] Top Mode Bar Switcher: Implement the 7 primary application modes (`EDIT`, `DESIGN`, `ANIMATE`, `REVIEW`, `PRESENT`, `EXPORT`, `SORTER`) with active tab states and keyboard shortcuts.
-- [ ] Presenter Console 3-Pane Layout:
+- [x] Presenter Console 3-Pane Layout: (3-pane `body.presenting` layout: left CURRENT stage with build stepper + prev/next, right NEXT thumbnail + zoomable speaker notes + PRESENTATION CONTROLS (elapsed HH:MM:SS with pause/restart, target countdown, Black/White/Freeze shutters), bottom SLIDE NAVIGATOR filmstrip; presenter top bar with Live badge, monitor select, Swap Displays, End Show, wall clock; status bar with `Slide X of Y · Build X of Y` + audience monitor label. E2e-pixel-verified on Xvfb: nav sync, black/white/freeze shutters, pause/restart, navigator jump, end-show restore.)
   - Left pane: `CURRENT` slide view with build stepper dots (`Build X of Y — Ready · Next to continue`), previous/next controls.
   - Right pane: `NEXT` thumbnail preview, `SPEAKER NOTES` with font zoom controls (`A- A A+`), and `PRESENTATION CONTROLS` (dual timers: elapsed with pause/restart + target countdown, and `Black`, `White`, `Freeze` screen shutters).
   - Bottom pane: persistent horizontal `SLIDE NAVIGATOR` filmstrip bar.

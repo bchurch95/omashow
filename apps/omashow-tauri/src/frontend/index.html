@@ -211,42 +211,169 @@
       background: radial-gradient(1100px 640px at 50% 44%, #202942 0%, #10131a 72%);
     }
     /* ---------- presenter console (visible while presenting) ---------- */
-    #console-side {
+    #present-topbar {
       display: none;
-      width: 340px;
-      flex-direction: column;
-      gap: 14px;
-      padding: 18px 20px;
-      border-left: 1px solid var(--border);
-      background: var(--panel);
-      overflow: hidden;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      height: 42px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
-    #console-side h3 {
-      margin: 0 0 8px;
-      font-size: 10px;
+    .pt-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.4px; color: var(--text); }
+    #live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 1.2px;
+      letter-spacing: 0.8px;
+      color: #9ece6a;
+      padding: 3px 10px;
+      border: 1px solid rgba(158, 206, 106, 0.4);
+      border-radius: 999px;
+      background: rgba(158, 206, 106, 0.08);
+    }
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #9ece6a;
+      animation: livepulse 1.6s ease-in-out infinite;
+    }
+    @keyframes livepulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(158, 206, 106, 0.5); }
+      50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(158, 206, 106, 0); }
+    }
+    #monitor-select {
+      margin-left: auto;
+      max-width: 270px;
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      padding: 5px 8px;
+      outline: none;
+    }
+    #monitor-select:focus { border-color: var(--accent); }
+    #monitor-select:disabled { opacity: 0.5; }
+    #btn-swap-displays, #btn-end-show {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+    }
+    #btn-swap-displays svg, #btn-end-show svg { width: 14px; height: 14px; }
+    #btn-swap-displays:hover { border-color: var(--accent); }
+    #btn-end-show {
+      border-color: rgba(243, 68, 58, 0.55);
+      background: rgba(243, 68, 58, 0.12);
+      color: #f37c70;
+      border-radius: 999px;
+    }
+    #btn-end-show:hover { background: rgba(243, 68, 58, 0.22); }
+    #timer-clock { font-size: 13px; color: #c6cedd; font-variant-numeric: tabular-nums; }
+    #stage-col { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    #current-header, #current-footer { display: none; }
+    .pane-kicker {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
       text-transform: uppercase;
       color: #d0d8e6;
     }
+    .pane-sub { font-size: 12px; color: #8a93a8; }
+    .head-dash { font-size: 11px; color: #555f78; }
+    #current-header {
+      align-items: center;
+      gap: 8px;
+      padding: 2px 6px 0;
+    }
+    #current-footer {
+      align-items: center;
+      gap: 10px;
+      padding: 2px 6px;
+    }
+    #build-label { font-size: 12px; color: #9aa3b8; }
+    #build-dots { display: flex; gap: 5px; }
+    .build-dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4460; }
+    .build-dot.done { background: var(--accent); }
+    .flex-spacer { flex: 1; }
+    #btn-prev, #btn-next {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+    }
+    #btn-prev svg, #btn-next svg { width: 14px; height: 14px; }
+    #btn-prev:hover { border-color: var(--accent); }
+    #btn-next { background: var(--accent); border-color: var(--accent); color: #0f1117; }
+    #btn-next:hover { filter: brightness(1.12); }
+    #console-side {
+      display: none;
+      width: 372px;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0;
+      overflow-y: auto;
+      min-height: 0;
+    }
+    .console-block {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      flex-shrink: 0;
+    }
+    .console-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .console-head .zoom-btns { margin-left: auto; }
     #next-thumb {
       position: relative;
       width: 100%;
+      max-width: 312px;
+      max-height: 176px;
+      margin: 0 auto;
       aspect-ratio: 16 / 9;
       background: #fff;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
     }
-    #next-label {
-      margin-top: 6px;
-      font-size: 12px;
+    .notes-block { flex: 1; min-height: 72px; display: flex; flex-direction: column; }
+    .zoom-btns { display: flex; gap: 4px; }
+    .zoom-btns button {
+      min-width: 26px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--panel-2);
       color: #9aa3b8;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      cursor: pointer;
     }
-    .notes-block { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .zoom-btns button:hover { color: var(--text); border-color: var(--accent); }
     #console-notes {
       flex: 1;
       min-height: 40px;
@@ -257,24 +384,169 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .controls-block { display: flex; flex-direction: column; gap: 8px; }
+    #timer-row { display: flex; gap: 10px; }
+    .timer-cell {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 8px 10px;
+      min-width: 0;
+    }
+    .timer-name {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #8a93a8;
+    }
+    #timer-elapsed, #timer-countdown {
+      font-size: 22px;
+      font-weight: 650;
+      color: #edf1f7;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+    #timer-countdown.low { color: #f37c70; }
+    #timer-btns { display: flex; gap: 8px; }
+    #timer-btns button {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 8px;
+      background: var(--panel-2);
+      color: #c6cedd;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #timer-btns button:hover { border-color: var(--accent); color: var(--text); }
+    #shutter-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    #shutter-row button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #c6cedd;
+      padding: 8px 4px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    #shutter-row button svg { width: 15px; height: 15px; }
+    #shutter-row button:hover { border-color: var(--accent); }
+    #shutter-row button.on {
+      border-color: var(--accent);
+      background: rgba(122, 162, 247, 0.12);
+      color: var(--text);
+    }
+    #target-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #8a93a8;
+    }
+    #target-input {
+      width: 64px;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 12px;
+      padding: 4px 8px;
+      outline: none;
+      font-variant-numeric: tabular-nums;
+    }
+    #target-input:focus { border-color: var(--accent); }
     #console-tools {
       display: flex;
       justify-content: center;
       gap: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
     }
     #console-tools .icon-btn:disabled { opacity: 0.35; pointer-events: none; }
-    #console-timer {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
-      font-variant-numeric: tabular-nums;
+    /* ---------- bottom slide navigator (presenting) ---------- */
+    #navigator-strip {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px 12px;
+      min-height: 0;
     }
-    #timer-elapsed { font-size: 22px; font-weight: 650; color: #edf1f7; }
-    #timer-clock { font-size: 13px; color: #9aa3b8; }
+    #nav-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #nav-cells {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px 2px 4px;
+    }
+    #nav-cells::-webkit-scrollbar { height: 8px; }
+    #nav-cells::-webkit-scrollbar-thumb { background: #3a4460; border-radius: 4px; }
+    .nav-cell {
+      flex: 0 0 148px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+    }
+    .nav-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .nav-cell.current .nav-thumb {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(122, 162, 247, 0.35);
+    }
+    .nav-idx {
+      position: absolute;
+      left: 6px;
+      bottom: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(10, 12, 18, 0.75);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .nav-cap {
+      font-size: 11px;
+      color: #9aa3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .nav-cell.current .nav-cap { color: var(--text); }
+    #present-status {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 6px 2px;
+      font-size: 12px;
+      color: #8a93a8;
+    }
+    #ps-left { font-weight: 600; color: #c6cedd; }
     #slide-canvas {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -481,14 +753,35 @@
     /* ---------- present mode ---------- */
     body.presenting #sidebar,
     body.presenting #inspector,
-    body.presenting #notes-bar,
     body.presenting #status { display: none; }
-    body.presenting #topbar { opacity: 0; pointer-events: none; }
-    body.presenting.chrome-visible #topbar { opacity: 1; pointer-events: auto; }
-    body.presenting #preview-wrap { padding: 0; }
-    body.presenting #slide-canvas { border: none; border-radius: 0; box-shadow: none; }
-    body.presenting #main { flex-direction: row; }
-    body.presenting #console-side { display: flex; }
+    /* the notes bar gets an inline display from hasDeck(); !important wins */
+    body.presenting #notes-bar { display: none !important; }
+    /* while presenting, the edit chrome is replaced by the presenter topbar */
+    body.presenting #topbar,
+    body.presenting #modebar { display: none; }
+    body.presenting #preview-wrap { padding: 14px 14px 4px; background: none; }
+    body.presenting #slide-canvas {
+      border: 1px solid #3d465c;
+      border-radius: 4px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    }
+    /* 3-pane mission-control layout: current stage | console rail,
+       slide navigator strip and status line below */
+    body.presenting #main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 372px;
+      grid-template-rows: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      padding: 10px;
+      background: var(--bg);
+    }
+    body.presenting #stage-col { grid-column: 1; grid-row: 1; }
+    body.presenting #console-side { grid-column: 2; grid-row: 1; display: flex; }
+    body.presenting #navigator-strip { grid-column: 1 / -1; grid-row: 2; display: flex; }
+    body.presenting #present-status { grid-column: 1 / -1; grid-row: 3; display: flex; }
+    body.presenting #current-header { display: flex; }
+    body.presenting #current-footer { display: flex; }
+    body.presenting #present-topbar { display: flex; }
     /* ---------- top mode bar ---------- */
     #modebar {
       display: flex;
@@ -549,8 +842,6 @@
     body:not([data-mode="edit"]) #sidebar,
     body:not([data-mode="edit"]) #main,
     body:not([data-mode="edit"]) #inspector { display: none; }
-    body.presenting #modebar { opacity: 0; pointer-events: none; }
-    body.presenting.chrome-visible #modebar { opacity: 1; pointer-events: auto; }
     /* ---------- slide grid navigator (G while presenting) ---------- */
     #slide-grid {
       position: fixed;
@@ -677,21 +968,43 @@
     <button class="mode" data-mode="export" title="Export — vector PDF and standalone HTML5 (Alt+6)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m6 9 6-6 6 6"/><path d="M4 21h16"/></svg>EXPORT</button>
     <button class="mode" data-mode="sorter" title="Sorter — full-screen deck grid (Alt+7)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>SORTER</button>
   </nav>
+  <header id="present-topbar">
+    <span class="pt-brand">Presenter Console</span>
+    <span id="live-badge" title="Audience window is open"><span class="live-dot"></span>Live</span>
+    <select id="monitor-select" title="Audience display"></select>
+    <button id="btn-swap-displays" title="Move the audience window to the next display"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>Swap Displays</button>
+    <button id="btn-end-show" title="End the show (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5"/></svg>End Show</button>
+    <span id="timer-clock">--:--</span>
+  </header>
   <div id="content">
   <div id="sidebar">
     <div id="slides"></div>
   </div>
 
   <div id="main">
-    <div id="preview-wrap">
-      <div id="slide-canvas">
-        <div id="slide-stage"></div>
-        <svg id="ink-overlay" viewBox="0 0 12192000 6858000" preserveAspectRatio="none" aria-hidden="true"><g id="ink-strokes"></g></svg>
-        <textarea id="text-edit" spellcheck="false"></textarea>
-        <div id="empty-msg" class="empty-state">
-          Open a .pptx or create a new deck to begin
+    <div id="stage-col">
+      <header id="current-header">
+        <span class="pane-kicker">Current</span>
+        <span class="head-dash">—</span>
+        <span id="current-sub" class="pane-sub">Slide 1 of 1</span>
+      </header>
+      <div id="preview-wrap">
+        <div id="slide-canvas">
+          <div id="slide-stage"></div>
+          <svg id="ink-overlay" viewBox="0 0 12192000 6858000" preserveAspectRatio="none" aria-hidden="true"><g id="ink-strokes"></g></svg>
+          <textarea id="text-edit" spellcheck="false"></textarea>
+          <div id="empty-msg" class="empty-state">
+            Open a .pptx or create a new deck to begin
+          </div>
         </div>
       </div>
+      <footer id="current-footer">
+        <span id="build-label">Build 1 of 1 — Ready · Next to continue</span>
+        <span id="build-dots"></span>
+        <span class="flex-spacer"></span>
+        <button id="btn-prev" title="Previous slide (←)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 17-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></svg>Previous</button>
+        <button id="btn-next" title="Next slide (→)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 17 5-5-5-5"/><path d="M6 17l5-5-5-5"/></svg>Next</button>
+      </footer>
     </div>
     <div id="notes-bar" style="display:none">
       <label id="notes-label" title="Show / hide notes">Speaker notes <span id="notes-count" class="notes-count"></span></label>
@@ -713,27 +1026,74 @@
     </div>
     <aside id="console-side">
       <section class="console-block">
-        <h3>Up next</h3>
+        <header class="console-head">
+          <span class="pane-kicker">Next</span>
+          <span class="head-dash">—</span>
+          <span id="next-sub" class="pane-sub">—</span>
+        </header>
         <div id="next-thumb"></div>
-        <div id="next-label">—</div>
       </section>
       <section class="console-block notes-block">
-        <h3>Speaker notes</h3>
+        <header class="console-head">
+          <span class="pane-kicker">Speaker Notes</span>
+          <span class="zoom-btns">
+            <button id="notes-zoom-out" title="Smaller notes text">A−</button>
+            <button id="notes-zoom-reset" title="Reset notes text size">A</button>
+            <button id="notes-zoom-in" title="Larger notes text">A+</button>
+          </span>
+        </header>
         <div id="console-notes"></div>
       </section>
-      <footer id="console-tools">
+      <section class="console-block controls-block">
+        <header class="console-head"><span class="pane-kicker">Presentation Controls</span></header>
+        <div id="timer-row">
+          <div class="timer-cell">
+            <span class="timer-name">Elapsed</span>
+            <span id="timer-elapsed">00:00:00</span>
+          </div>
+          <div class="timer-cell">
+            <span class="timer-name">Countdown</span>
+            <span id="timer-countdown">00:20:00</span>
+          </div>
+        </div>
+        <div id="timer-btns">
+          <button id="btn-timer-pause">Pause</button>
+          <button id="btn-timer-restart">Restart</button>
+        </div>
+        <div id="shutter-row">
+          <button id="btn-shutter-black" title="Black out the audience screen (B)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="5" width="16" height="14" rx="2"/></svg>Black</button>
+          <button id="btn-shutter-white" title="White out the audience screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="2"/></svg>White</button>
+          <button id="btn-shutter-freeze" title="Hold the projected frame while you browse ahead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11"/></svg>Freeze</button>
+        </div>
+        <div id="target-row">
+          <label for="target-input">Target</label>
+          <input id="target-input" type="number" min="1" max="600" value="20" title="Target duration in minutes" />
+          <span>min</span>
+        </div>
+      </section>
+      <section class="console-block tools-block">
+        <header class="console-head"><span class="pane-kicker">Tools</span></header>
+        <div id="console-tools">
         <button id="btn-grid" class="icon-btn" title="Slide grid — jump to any slide (G)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
         <button id="btn-laser" class="icon-btn" title="Laser pointer — hold Ctrl, or toggle here (on while presenting)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="15" r="3" fill="currentColor" stroke="none"/><path d="M11.5 12.5 20 4"/><path d="M17 4h3v3"/></svg></button>
         <button id="btn-pen" class="icon-btn" title="Pen — draw on the slide (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>
         <button id="btn-marker" class="icon-btn" title="Highlighter — draw on the slide (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4l8 8z"/></svg></button>
         <button id="btn-ink-undo" class="icon-btn" title="Undo last stroke (U)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
         <button id="btn-ink-clear" class="icon-btn" title="Clear all strokes on this slide (C)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
-      </footer>
-      <footer id="console-timer">
-        <span id="timer-elapsed">00:00</span>
-        <span id="timer-clock">--:--</span>
-      </footer>
+        </div>
+      </section>
     </aside>
+    <div id="navigator-strip">
+      <header id="nav-header">
+        <span class="pane-kicker">Slide Navigator</span>
+        <span class="pane-sub">click a slide to jump — the audience follows instantly</span>
+      </header>
+      <div id="nav-cells"></div>
+    </div>
+    <footer id="present-status">
+      <span id="ps-left">–</span>
+      <span id="ps-right">–</span>
+    </footer>
     <div id="slide-grid" aria-hidden="true">
       <header id="grid-header">
         <span id="grid-title">Jump to slide</span>

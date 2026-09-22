@@ -11,6 +11,13 @@
       transition: background 0.15s ease;
     }
     #slide-canvas.blackout { background: #000; }
+    #slide-canvas.whiteout { background: #fff; }
+    #slide-canvas.whiteout .slide-shape,
+    #slide-canvas.whiteout .slide-pic { visibility: hidden; }
+    #slide-canvas.blackout #ink-overlay,
+    #slide-canvas.blackout #laser,
+    #slide-canvas.whiteout #ink-overlay,
+    #slide-canvas.whiteout #laser { display: none; }
     #ink-overlay {
       position: absolute;
       top: 0;

@@ -101,16 +101,23 @@ let presentHideTimer = null;
 function enterPresent() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
   document.body.classList.add("presenting");
-  const host = $("main");
-  if (host.requestFullscreen) host.requestFullscreen().catch(() => {});
+  // Fullscreen the whole document (not just #main) so the presenter
+  // topbar, a sibling of the content area, stays visible.
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+  setShutter("clear");
   paintCurrentSlide();
   updateConsole();
+  updateBuildStepper();
   startTimer();
 }
 function exitPresent() {
   document.body.classList.remove("presenting");
   document.body.classList.remove("chrome-visible");
   stopTimer();
+  shutter = "clear";
+  ["black", "white", "freeze"].forEach((m) => $("btn-shutter-" + m).classList.remove("on"));
   laserTool = false;
   laserCtrl = false;
   $("btn-laser").classList.remove("on");
@@ -163,21 +170,34 @@ function toggleSlideGrid() {
   else openSlideGrid();
 }
 
-// ---------- presenter console: next slide, notes, timer ----------
+// ---------- presenter console: timers, target countdown ----------
 let presentStart = 0;
 let timerInt = null;
-function fmtElapsed(ms) {
-  const s = Math.floor(ms / 1000);
+let timerPaused = false;
+let pausedElapsedMs = 0;
+let targetMinutes = 20;
+function fmtHMS(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  const mm = String(m).padStart(2, "0"), sec = String(ss).padStart(2, "0");
-  return h ? h + ":" + mm + ":" + sec : mm + ":" + sec;
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+}
+function elapsedMs() {
+  return timerPaused ? pausedElapsedMs : Date.now() - presentStart;
 }
 function tickTimer() {
-  $("timer-elapsed").textContent = fmtElapsed(Date.now() - presentStart);
+  $("timer-elapsed").textContent = fmtHMS(elapsedMs());
+  const targetMs = targetMinutes * 60000;
+  const remaining = Math.max(0, targetMs - elapsedMs());
+  const cd = $("timer-countdown");
+  cd.textContent = fmtHMS(remaining);
+  cd.classList.toggle("low", remaining < targetMs * 0.1);
   $("timer-clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 function startTimer() {
   presentStart = Date.now();
+  timerPaused = false;
+  pausedElapsedMs = 0;
+  $("btn-timer-pause").textContent = "Pause";
   tickTimer();
   clearInterval(timerInt);
   timerInt = setInterval(tickTimer, 1000);
@@ -186,33 +206,189 @@ function stopTimer() {
   clearInterval(timerInt);
   timerInt = null;
 }
+function toggleTimerPause() {
+  if (!presenting()) return;
+  if (timerPaused) {
+    presentStart = Date.now() - pausedElapsedMs;
+    timerPaused = false;
+    $("btn-timer-pause").textContent = "Pause";
+  } else {
+    pausedElapsedMs = Date.now() - presentStart;
+    timerPaused = true;
+    $("btn-timer-pause").textContent = "Resume";
+  }
+  tickTimer();
+}
+function restartTimer() {
+  if (!presenting()) return;
+  startTimer();
+}
+$("btn-timer-pause").addEventListener("click", toggleTimerPause);
+$("btn-timer-restart").addEventListener("click", restartTimer);
+$("target-input").addEventListener("change", () => {
+  const v = parseInt($("target-input").value, 10);
+  if (Number.isFinite(v) && v >= 1 && v <= 600) {
+    targetMinutes = v;
+    tickTimer();
+  } else {
+    $("target-input").value = String(targetMinutes);
+  }
+});
 
+// Build stepper: each slide has a single build until the M8 animation
+// engine lands; the label and dots track the state the timeline will own.
+const BUILDS_PER_SLIDE = 1;
+function updateBuildStepper() {
+  const cur = 1, total = BUILDS_PER_SLIDE;
+  $("build-label").textContent = "Build " + cur + " of " + total + " — Ready · Next to continue";
+  const dots = $("build-dots");
+  dots.innerHTML = "";
+  for (let b = 1; b <= total; b++) {
+    const d = document.createElement("span");
+    d.className = "build-dot" + (b <= cur ? " done" : "");
+    dots.appendChild(d);
+  }
+}
 function updateConsole() {
   if (!model) return;
   $("console-notes").textContent = currentSlide >= 0 ? (model.slides[currentSlide].notes || "") : "";
-  if (currentSlide < 0) { $("next-label").textContent = "—"; return; }
+  if (currentSlide >= 0) {
+    $("current-sub").textContent = "Slide " + (currentSlide + 1) + " of " + model.slides.length;
+    $("ps-left").textContent =
+      "Slide " + (currentSlide + 1) + " of " + model.slides.length + " · Build 1 of " + BUILDS_PER_SLIDE;
+  } else {
+    $("current-sub").textContent = "—";
+    $("ps-left").textContent = "—";
+  }
+  if (currentSlide < 0) { $("next-sub").textContent = "—"; return; }
   const next = currentSlide + 1;
   if (next < model.slides.length) {
     const t = model.slides[next].title;
-    $("next-label").textContent = "Slide " + (next + 1) + (t ? " — " + t : "");
+    $("next-sub").textContent = "Slide " + (next + 1) + " of " + model.slides.length + (t ? " — " + t : "");
     fetchSlideContent(next);
     const cached = slideContents.get(next);
     if (cached) renderSlideInto($("next-thumb"), cached, true);
   } else {
-    $("next-label").textContent = "End of deck";
+    $("next-sub").textContent = "End of deck";
+  }
+  updateBuildStepper();
+}
+// ---------- bottom slide navigator (present mode) ----------
+function renderNavigator() {
+  const cells = $("nav-cells");
+  cells.innerHTML = "";
+  if (!model) return;
+  model.slides.forEach((s, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "nav-cell" + (i === currentSlide ? " current" : "");
+    cell.title = "Slide " + (i + 1) + (s.title ? " — " + s.title : "");
+    const thumb = document.createElement("div");
+    thumb.className = "nav-thumb";
+    const idx = document.createElement("span");
+    idx.className = "nav-idx";
+    idx.textContent = String(i + 1);
+    thumb.appendChild(idx);
+    const cap = document.createElement("span");
+    cap.className = "nav-cap";
+    cap.textContent = s.title || "(no title)";
+    cell.append(thumb, cap);
+    cell.addEventListener("click", () => selectSlide(i));
+    cells.appendChild(cell);
+    const cached = slideContents.get(i);
+    if (cached) renderSlideInto(thumb, cached, true);
+  });
+  const active = cells.querySelector(".nav-cell.current");
+  if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+function refreshNavigatorActive() {
+  document.querySelectorAll("#nav-cells .nav-cell").forEach((el, j) => {
+    el.classList.toggle("current", j === currentSlide);
+  });
+  const active = document.querySelector("#nav-cells .nav-cell.current");
+  if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+// Notes font zoom: A- / A / A+ in the console notes card.
+let notesFontPx = 14;
+function setNotesZoom(px) {
+  notesFontPx = Math.min(24, Math.max(11, px));
+  $("console-notes").style.fontSize = notesFontPx + "px";
+}
+$("notes-zoom-out").addEventListener("click", () => setNotesZoom(notesFontPx - 1));
+$("notes-zoom-in").addEventListener("click", () => setNotesZoom(notesFontPx + 1));
+$("notes-zoom-reset").addEventListener("click", () => setNotesZoom(14));
+// Previous / Next buttons in the current-slide footer.
+$("btn-prev").addEventListener("click", () => {
+  if (model && currentSlide > 0) selectSlide(currentSlide - 1);
+});
+$("btn-next").addEventListener("click", () => {
+  if (!model) return;
+  if (currentSlide < model.slides.length - 1) selectSlide(currentSlide + 1);
+  else flash("end of deck");
+});
+// ---------- audience display selection (top bar) ----------
+async function refreshMonitorSelect() {
+  const sel = $("monitor-select");
+  try {
+    const monitors = await invoke("list_monitors");
+    sel.innerHTML = "";
+    sel.disabled = !monitors.length;
+    monitors.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.name;
+      opt.textContent = m.name + " · " + m.width + " × " + m.height + (m.is_primary ? " (primary)" : "");
+      sel.appendChild(opt);
+    });
+  } catch {
+    sel.disabled = true;
   }
 }
+function setPresentStatusRight(audienceLabel) {
+  $("ps-right").textContent = "Presenting — holding notifications" + (audienceLabel ? " · Audience: " + audienceLabel : "");
+}
+$("monitor-select").addEventListener("change", async () => {
+  const name = $("monitor-select").value;
+  if (!name || !presenting()) return;
+  try {
+    await invoke("open_audience_window", { monitorName: name });
+    setPresentStatusRight(name);
+    flash("audience on " + name);
+  } catch (e) { flash(String(e), "err"); }
+});
+$("btn-swap-displays").addEventListener("click", () => {
+  const sel = $("monitor-select");
+  if (sel.options.length < 2) { flash("need two displays to swap", "err"); return; }
+  sel.selectedIndex = (sel.selectedIndex + 1) % sel.options.length;
+  sel.dispatchEvent(new Event("change"));
+});
+$("btn-end-show").addEventListener("click", exitPresent);
 
 // ---------- audience window event sync ----------
-function emitToAudience(event, payload) {
-  const ev = window.__TAURI__ && window.__TAURI__.event;
-  if (ev) ev.emit(event, payload).catch(() => {});
+// Audience screen shutter: clear | black | white | freeze. Freeze holds the
+// projected frame while the presenter browses ahead in the console.
+let shutter = "clear";
+function audienceFrozen() {
+  return presenting() && shutter === "freeze";
 }
-let blackedOut = false;
+function setShutter(mode) {
+  if (!presenting() && mode !== "clear") return;
+  shutter = mode;
+  emitToAudience("shutter", { mode: mode === "freeze" ? "clear" : mode });
+  ["black", "white", "freeze"].forEach((m) => {
+    $("btn-shutter-" + m).classList.toggle("on", shutter === m);
+  });
+}
 function toggleBlackout() {
   if (!presenting()) return;
-  blackedOut = !blackedOut;
-  emitToAudience("blackout-toggle", { on: blackedOut });
+  setShutter(shutter === "black" ? "clear" : "black");
+}
+$("btn-shutter-black").addEventListener("click", () => setShutter(shutter === "black" ? "clear" : "black"));
+$("btn-shutter-white").addEventListener("click", () => setShutter(shutter === "white" ? "clear" : "white"));
+$("btn-shutter-freeze").addEventListener("click", () => setShutter(shutter === "freeze" ? "clear" : "freeze"));
+function emitToAudience(event, payload) {
+  if (audienceFrozen() && (event === "slide-changed" || event === "ink" || event === "laser-move")) return;
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if (ev) ev.emit(event, payload).catch(() => {});
 }
 
 // ---------- laser pointer: dot on the audience screen follows the cursor ----------
@@ -390,10 +566,15 @@ $("btn-ink-clear").onclick = inkClear;
 async function startPresentation() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
   enterPresent();
+  await refreshMonitorSelect();
   try {
     const name = await invoke("open_audience_window", { monitorName: null });
+    setPresentStatusRight(name);
     flash("audience window on " + name);
-  } catch (e) { flash(String(e), "err"); }
+  } catch (e) {
+    setPresentStatusRight(null);
+    flash(String(e), "err");
+  }
 }
 
 if (window.__TAURI__ && window.__TAURI__.event) {
@@ -440,6 +621,8 @@ function paintSlide(i, content) {
   if (item) renderSlideInto(item.querySelector(".slide-thumb"), content, true);
   const gridThumb = document.querySelectorAll("#grid-cells .grid-thumb")[i];
   if (gridThumb) renderSlideInto(gridThumb, content, true);
+  const navThumb = document.querySelectorAll("#nav-cells .nav-thumb")[i];
+  if (navThumb) renderSlideInto(navThumb, content, true);
   if (i === currentSlide) {
     fitCanvas();
     renderSlideInto($("slide-stage"), content, false);
@@ -594,6 +777,7 @@ function renderFilmstrip() {
     const cached = slideContents.get(i);
     if (cached) renderSlideInto(thumb, cached, true);
   });
+  renderNavigator();
 }
 
 // ---------- selection ----------
@@ -622,6 +806,7 @@ function selectSlide(i) {
   document.querySelectorAll("#grid-cells .grid-cell").forEach((el, j) => {
     el.classList.toggle("current", j === i);
   });
+  refreshNavigatorActive();
   const active = document.querySelectorAll(".slide-item")[i];
   if (active) active.scrollIntoView({ block: "nearest" });
   paintCurrentSlide();
@@ -731,6 +916,8 @@ function setModeTab(m) {
   document.querySelectorAll("#modebar .mode").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
 }
 function enterMode(m) {
+  // The console owns the layout while presenting; only PRESENT re-enters it.
+  if (presenting() && m !== "present") return;
   if (m === "present") {
     if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
     setModeTab("present");
@@ -990,6 +1177,10 @@ window.addEventListener("resize", () => {
     document.querySelectorAll(".slide-item").forEach((item, i) => {
       const cached = slideContents.get(i);
       if (cached) renderSlideInto(item.querySelector(".slide-thumb"), cached, true);
+    });
+    document.querySelectorAll("#nav-cells .nav-thumb").forEach((thumb, i) => {
+      const cached = slideContents.get(i);
+      if (cached) renderSlideInto(thumb, cached, true);
     });
     paintCurrentSlide();
   }, 200);
