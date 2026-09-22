@@ -1,4 +1,4 @@
-// Audience window: borderless slide surface on the secondary monitor.
+// Audience window: slide surface on the secondary monitor (or preview window).
 // Stays in sync with the presenter console via Tauri events; Esc or the
 // console's present-exit event closes the window.
 
@@ -42,12 +42,29 @@ function audStrokeEl(stroke) {
   return el;
 }
 
+function fitAudienceCanvas(dims) {
+  if (!dims) return;
+  const availW = window.innerWidth;
+  const availH = window.innerHeight;
+  let w = availW;
+  let h = (w * dims.height_emu) / dims.width_emu;
+  if (h > availH) {
+    h = availH;
+    w = (h * dims.width_emu) / dims.height_emu;
+  }
+  canvas.style.width = Math.floor(w) + "px";
+  canvas.style.height = Math.floor(h) + "px";
+  sizeInkOverlay();
+}
+
 function sizeInkOverlay() {
-  // The canvas fills the window, but the slide itself only occupies the
-  // top w x (w * slideH/slideW) box — the overlay must match that box.
+  if (!slideDims) return;
   const w = canvas.clientWidth;
-  const h = w * slideDims.height_emu / slideDims.width_emu;
+  const h = canvas.clientHeight;
+  inkSvg.style.width = w + "px";
   inkSvg.style.height = h + "px";
+  inkSvg.style.left = canvas.offsetLeft + "px";
+  inkSvg.style.top = canvas.offsetTop + "px";
   inkSvg.setAttribute("viewBox", `0 0 ${slideDims.width_emu} ${slideDims.height_emu}`);
 }
 
@@ -59,23 +76,26 @@ function audRenderInk(strokes) {
 }
 
 async function renderSlideAt(i) {
-  const content = await invoke("get_slide_content", { slide: i });
-  slideDims = content.slide_dimensions;
-  audCurrent = i;
-  renderSlideInto(canvas, content, false);
-  audRenderInk(audInk.get(i) || []);
+  try {
+    const content = await invoke("get_slide_content", { slide: i });
+    slideDims = content.slide_dimensions;
+    audCurrent = i;
+    fitAudienceCanvas(slideDims);
+    renderSlideInto(canvas, content, false);
+    audRenderInk(audInk.get(i) || []);
+  } catch (err) {
+    console.error("audience: failed to render slide", err);
+  }
 }
 
 events.listen("slide-changed", (e) => {
   const p = e.payload;
+  if (!p || typeof p.index !== "number") return;
   audInk.set(p.index, (p.ink || []).map((s) => ({ tool: s.tool, pts: [...s.pts] })));
-  renderSlideAt(p.index).catch((err) =>
-    console.error("audience: failed to render slide", err)
-  );
+  renderSlideAt(p.index);
 });
 
-// The window may open after the presenter already advanced — pull the
-// current slide on load so the audience never starts blank.
+// Pull current slide on load so audience never starts blank
 invoke("get_current_slide")
   .then(renderSlideAt)
   .catch((err) => console.error("audience: no current slide", err));
@@ -84,11 +104,10 @@ events.listen("laser-move", (e) => {
   const p = e.payload;
   if (!p || !p.on) { laser.style.display = "none"; return; }
   if (!slideDims) return;
-  // Same scale renderSlideInto uses: canvas width spans the slide width.
   const w = canvas.clientWidth;
-  const h = w * slideDims.height_emu / slideDims.width_emu;
-  laser.style.left = p.x * w + "px";
-  laser.style.top = p.y * h + "px";
+  const h = canvas.clientHeight;
+  laser.style.left = (canvas.offsetLeft + p.x * w) + "px";
+  laser.style.top = (canvas.offsetTop + p.y * h) + "px";
   laser.style.display = "block";
 });
 
@@ -118,17 +137,43 @@ events.listen("ink", (e) => {
   }
 });
 
-events.listen("blackout-toggle", (e) => {
-  canvas.classList.toggle("blackout", !!e.payload.on);
-});
+if (events) {
+  events.listen("blackout-toggle", (e) => {
+    canvas.classList.toggle("blackout", !!e.payload.on);
+  });
 
-events.listen("present-exit", () => {
-  invoke("close_audience_window").catch(() => {});
-});
+  events.listen("present-exit", () => {
+    invoke("close_audience_window").catch(() => {});
+  });
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    events.emit("present-exit", {}).catch(() => {});
+  // Announce readiness so main window emits current slide immediately
+  events.emit("audience-ready", {}).catch(() => {});
+}
+
+// Keep canvas letterboxed/pillarboxed on resize
+window.addEventListener("resize", () => {
+  if (lastContent) {
+    fitAudienceCanvas(lastContent.slide_dimensions);
+    renderSlideInto(canvas, lastContent, false);
   }
+});
+
+// Keyboard controls if audience window receives focus
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" || e.key.toLowerCase() === "q") {
+    e.preventDefault();
+    if (events) events.emit("present-exit", {}).catch(() => {});
+  } else if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " " || e.key === "Enter") {
+    if (events) events.emit("present-next", {}).catch(() => {});
+  } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+    if (events) events.emit("present-prev", {}).catch(() => {});
+  }
+});
+
+// Hide cursor after 2.5s of inactivity
+let cursorTimer = null;
+window.addEventListener("mousemove", () => {
+  document.body.classList.add("show-cursor");
+  clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.remove("show-cursor"), 2500);
 });
