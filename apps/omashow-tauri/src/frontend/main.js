@@ -118,6 +118,7 @@ function exitPresent() {
   emitToAudience("laser-move", { on: false });
   invoke("close_audience_window").catch(() => {});
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  resetModeToEdit();
 }
 
 // ---------- slide grid navigator: G while presenting ----------
@@ -691,7 +692,7 @@ $("btn-saveas").onclick = async () => {
   } catch (e) { flash(String(e), "err"); }
 };
 
-$("btn-exportpdf").onclick = async () => {
+async function doExportPdf() {
   if (!model) { flash("nothing to export", "err"); return; }
   try {
     const path = await invoke("save_file_dialog");
@@ -700,9 +701,9 @@ $("btn-exportpdf").onclick = async () => {
     const p = await invoke("export_pdf", { path });
     flash(`PDF exported: ${p}`);
   } catch (e) { flash(String(e), "err"); }
-};
+}
 
-$("btn-exporthtml").onclick = async () => {
+async function doExportHtml() {
   if (!model) { flash("nothing to export", "err"); return; }
   try {
     const path = await invoke("save_file_dialog");
@@ -711,7 +712,53 @@ $("btn-exporthtml").onclick = async () => {
     const p = await invoke("export_html", { path });
     flash(`HTML exported: ${p}`);
   } catch (e) { flash(String(e), "err"); }
+}
+
+$("btn-exportpdf").onclick = doExportPdf;
+$("btn-exporthtml").onclick = doExportHtml;
+$("panel-export-pdf").onclick = doExportPdf;
+$("panel-export-html").onclick = doExportHtml;
+
+// ---------- top mode bar (Alt+1…Alt+7) ----------
+const MODE_ORDER = ["edit", "design", "animate", "review", "present", "export", "sorter"];
+const MODE_COPY = {
+  design: "Masters, layouts, palettes and typography controls land in the next step of this milestone. Until then, the Edit canvas renders the deck's current master and layout exactly.",
+  animate: "Build-in effects, easing curves and the timeline land in the next step of this milestone. Slide-to-slide transitions already run in Present mode.",
+  review: "Comments, change tracking and revision history land later. For now, walk the deck in Present mode and check each shape in the Edit inspectors.",
+  sorter: "The full-screen multi-column deck grid lands in the next step of this milestone. Until then, drag thumbnails in the filmstrip to reorder slides.",
 };
+function setModeTab(m) {
+  document.querySelectorAll("#modebar .mode").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+}
+function enterMode(m) {
+  if (m === "present") {
+    if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+    setModeTab("present");
+    startPresentation();
+    return;
+  }
+  if (m !== "edit" && m !== "export") {
+    $("ph-title").textContent = m[0].toUpperCase() + m.slice(1);
+    $("ph-body").textContent = MODE_COPY[m] || "";
+  }
+  document.body.dataset.mode = m;
+  setModeTab(m);
+}
+function resetModeToEdit() {
+  document.body.dataset.mode = "edit";
+  setModeTab("edit");
+}
+document.querySelectorAll("#modebar .mode").forEach((b) => {
+  b.onclick = () => enterMode(b.dataset.mode);
+});
+document.addEventListener("keydown", (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!/^Digit[1-7]$/.test(e.code)) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  e.preventDefault();
+  enterMode(MODE_ORDER[Number(e.code.slice(5)) - 1]);
+});
 
 const zoomRange = $("zoom-range");
 const zoomPct = $("zoom-pct");

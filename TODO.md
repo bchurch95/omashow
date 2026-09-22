@@ -52,7 +52,7 @@
 
 ## Milestone 8: Official OmaShow UI Suite & Visual Polish (Matching Video Demo Specs)
 *Reference: `design_spec/OMASHOW_UI_SPEC.md` and screenshots in `design_spec/screenshots/`*
-- [ ] Top Mode Bar Switcher: Implement the 7 primary application modes (`EDIT`, `DESIGN`, `ANIMATE`, `REVIEW`, `PRESENT`, `EXPORT`, `SORTER`) with active tab states and keyboard shortcuts.
+- [x] Top Mode Bar Switcher: Implement the 7 primary application modes (`EDIT`, `DESIGN`, `ANIMATE`, `REVIEW`, `PRESENT`, `EXPORT`, `SORTER`) with active tab states and keyboard shortcuts.
 - [ ] Presenter Console 3-Pane Layout:
   - Left pane: `CURRENT` slide view with build stepper dots (`Build X of Y — Ready · Next to continue`), previous/next controls.
   - Right pane: `NEXT` thumbnail preview, `SPEAKER NOTES` with font zoom controls (`A- A A+`), and `PRESENTATION CONTROLS` (dual timers: elapsed with pause/restart + target countdown, and `Black`, `White`, `Freeze` screen shutters).

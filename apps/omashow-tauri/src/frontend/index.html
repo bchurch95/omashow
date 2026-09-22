@@ -489,6 +489,68 @@
     body.presenting #slide-canvas { border: none; border-radius: 0; box-shadow: none; }
     body.presenting #main { flex-direction: row; }
     body.presenting #console-side { display: flex; }
+    /* ---------- top mode bar ---------- */
+    #modebar {
+      display: flex;
+      gap: 2px;
+      padding: 0 10px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .mode {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 14px 8px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--dim);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      cursor: pointer;
+    }
+    .mode svg { width: 15px; height: 15px; }
+    .mode:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+    .mode.on { color: var(--accent); border-bottom-color: var(--accent); }
+    .mode-panel {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 48px;
+      background: var(--bg);
+    }
+    .mode-panel h2 { margin: 0; font-size: 22px; letter-spacing: 0.02em; }
+    .mode-panel .panel-sub { margin: 0; color: var(--dim); max-width: 560px; text-align: center; line-height: 1.6; }
+    .export-grid { display: flex; gap: 20px; margin-top: 16px; }
+    .export-card {
+      width: 300px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .export-card h3 { margin: 0; font-size: 15px; }
+    .export-card p { margin: 0; color: var(--dim); font-size: 12.5px; line-height: 1.55; flex: 1; }
+    .export-card .primary { align-self: flex-start; }
+    body[data-mode="export"] #export-panel { display: flex; }
+    body[data-mode="design"] #placeholder-panel,
+    body[data-mode="animate"] #placeholder-panel,
+    body[data-mode="review"] #placeholder-panel,
+    body[data-mode="sorter"] #placeholder-panel { display: flex; }
+    body:not([data-mode="edit"]) #sidebar,
+    body:not([data-mode="edit"]) #main,
+    body:not([data-mode="edit"]) #inspector { display: none; }
+    body.presenting #modebar { opacity: 0; pointer-events: none; }
+    body.presenting.chrome-visible #modebar { opacity: 1; pointer-events: auto; }
     /* ---------- slide grid navigator (G while presenting) ---------- */
     #slide-grid {
       position: fixed;
@@ -586,7 +648,7 @@
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   </style>
 </head>
-<body>
+<body data-mode="edit">
   <header id="topbar">
     <h2 class="brand">Omashow</h2>
     <span id="doc-title"></span>
@@ -606,6 +668,15 @@
     </div>
     <button id="btn-present" class="primary" title="Start the show — arrows to navigate, Esc to exit"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z"/></svg>Present</button>
   </header>
+  <nav id="modebar" aria-label="OmaShow modes">
+    <button class="mode on" data-mode="edit" title="Edit — canvas, filmstrip and inspectors (Alt+1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>EDIT</button>
+    <button class="mode" data-mode="design" title="Design — masters, layouts, palettes and typography (Alt+2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7Z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>DESIGN</button>
+    <button class="mode" data-mode="animate" title="Animate — build effects, easing and the timeline (Alt+3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.7 5.7 1.8-5.7 1.8L12 18l-1.8-5.7L4.5 10.5l5.7-1.8Z"/><path d="M19 15v4M17 17h4"/></svg>ANIMATE</button>
+    <button class="mode" data-mode="review" title="Review — comments, change tracking and revisions (Alt+4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>REVIEW</button>
+    <button class="mode" data-mode="present" title="Present — launch the show on the second screen (Alt+5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="1"/><path d="M8 21h8M12 17v4"/></svg>PRESENT</button>
+    <button class="mode" data-mode="export" title="Export — vector PDF and standalone HTML5 (Alt+6)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m6 9 6-6 6 6"/><path d="M4 21h16"/></svg>EXPORT</button>
+    <button class="mode" data-mode="sorter" title="Sorter — full-screen deck grid (Alt+7)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>SORTER</button>
+  </nav>
   <div id="content">
   <div id="sidebar">
     <div id="slides"></div>
@@ -680,6 +751,26 @@
     <div class="row"><span>Shapes</span><b id="insp-shapes">–</b></div>
     <div class="row"><span>Title</span><b id="insp-title">–</b></div>
   </aside>
+  <section id="export-panel" class="mode-panel">
+    <h2>Export</h2>
+    <p class="panel-sub">Ship this deck as a self-contained file — no OmaShow required on the target machine.</p>
+    <div class="export-grid">
+      <article class="export-card">
+        <h3>Vector PDF</h3>
+        <p>Print-quality PDF: every shape, line, fill and text run stays vector. Embedded pictures are flattened at full resolution.</p>
+        <button id="panel-export-pdf" class="primary">Export PDF…</button>
+      </article>
+      <article class="export-card">
+        <h3>Standalone HTML5</h3>
+        <p>One portable HTML file with all media inlined. Opens offline in any browser — arrows to navigate, F for fullscreen, N for notes.</p>
+        <button id="panel-export-html" class="primary">Export HTML…</button>
+      </article>
+    </div>
+  </section>
+  <section id="placeholder-panel" class="mode-panel">
+    <h2 id="ph-title">—</h2>
+    <p class="panel-sub" id="ph-body">—</p>
+  </section>
   </div>
   <script src="slide_render.js"></script>
   <script src="main.js"></script>
