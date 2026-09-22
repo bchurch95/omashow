@@ -44,6 +44,8 @@ fn main() {
             add_slide_at,
             delete_slide,
             move_slide,
+            reorder_slides,
+            apply_theme,
             update_text_run,
             undo_presentation,
             redo_presentation,
@@ -254,6 +256,33 @@ fn move_slide(from: usize, to: usize, state: State<'_, Mutex<Deck>>) -> Result<S
     let mut deck = state.lock().map_err(|e| e.to_string())?;
     let doc = deck.doc.as_mut().ok_or("no presentation open")?;
     doc.move_slide(from, to).map_err(|e| e.to_string())?;
+    project(doc)
+}
+
+/// Reorder all slides to match `order`, a permutation of `0..slide_count`.
+#[tauri::command]
+fn reorder_slides(order: Vec<usize>, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.reorder_slides(order).map_err(|e| e.to_string())?;
+    project(doc)
+}
+
+/// Apply a deck-wide color theme (source hex -> target hex pairs), persisting
+/// the file immediately. The in-memory model is unchanged; the remap lives on
+/// the document and is rewritten into every XML part on save.
+#[tauri::command]
+fn apply_theme(
+    map: Vec<(String, String)>,
+    state: State<'_, Mutex<Deck>>,
+) -> Result<String, String> {
+    let mut deck = state.lock().map_err(|e| e.to_string())?;
+    let path = deck.path.clone();
+    let doc = deck.doc.as_mut().ok_or("no presentation open")?;
+    doc.apply_theme(map).map_err(|e| e.to_string())?;
+    if let Some(path) = path {
+        doc.save(path).map_err(|e| e.to_string())?;
+    }
     project(doc)
 }
 

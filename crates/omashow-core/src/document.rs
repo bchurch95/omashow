@@ -49,6 +49,9 @@ pub struct PptxDocument {
     /// Per original-file slide, the placeholder geometry inherited from its
     /// layout/master chain.
     geom_by_ordinal: Vec<PhMap>,
+    /// Pending deck-wide color remaps (theme engine), applied to every XML
+    /// part at save time. Empty unless a theme has been applied.
+    theme_map: Vec<(String, String)>,
 }
 
 impl Default for PptxDocument {
@@ -69,6 +72,7 @@ impl PptxDocument {
             history: UndoStack::new(),
             slide_ordinals: Vec::new(),
             geom_by_ordinal: Vec::new(),
+            theme_map: Vec::new(),
         }
     }
 
@@ -92,6 +96,7 @@ impl PptxDocument {
             history: UndoStack::new(),
             slide_ordinals,
             geom_by_ordinal,
+            theme_map: Vec::new(),
         })
     }
 
@@ -182,6 +187,62 @@ impl PptxDocument {
         crate::delete_slide(&mut self.pres, slide)?;
         self.slide_ordinals.remove(slide);
         self.record_slice_change(slide, before, "delete slide");
+        Ok(())
+    }
+
+    /// Reorder all slides to match `order` — a full permutation of
+    /// `0..slide_count` (undoable as a single "reorder slides" step).
+    pub fn reorder_slides(&mut self, order: Vec<usize>) -> Result<(), Error> {
+        let n = self.pres.slides.len();
+        if order.len() != n {
+            return Err(Error::OutOfRange(n));
+        }
+        let mut seen = vec![false; n];
+        for &i in &order {
+            if i >= n || seen[i] {
+                return Err(Error::OutOfRange(i));
+            }
+            seen[i] = true;
+        }
+        let before = self.pres.slides.clone();
+        let ord_before = self.slide_ordinals.clone();
+        self.pres.slides = order.iter().map(|&i| self.pres.slides[i].clone()).collect();
+        // Fresh documents carry no ordinal table; only reorder it when it
+        // tracks the slide list one-for-one.
+        if self.slide_ordinals.len() == n {
+            self.slide_ordinals = order.iter().map(|&i| self.slide_ordinals[i]).collect();
+        }
+        self.history.record(UndoCommand::Slides {
+            from: 0,
+            before,
+            after: self.pres.slides.clone(),
+            ord_before,
+            ord_after: self.slide_ordinals.clone(),
+            description: "reorder slides".into(),
+        });
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Queue a deck-wide color remap (the theme engine): on the next save,
+    /// every `srgbClr val="…"` whose hex matches a source color is rewritten
+    /// to the target across all XML parts — slides, layouts, masters, notes.
+    /// Hex values are case-insensitive; a leading `#` is ignored. Replaces
+    /// any previously queued map.
+    pub fn apply_theme(&mut self, map: Vec<(String, String)>) -> Result<(), Error> {
+        let norm = map
+            .into_iter()
+            .map(|(from, to)| {
+                let from = from.trim().trim_start_matches('#').to_lowercase();
+                let to = to.trim().trim_start_matches('#').to_lowercase();
+                if !is_hex6(&from) || !is_hex6(&to) {
+                    return Err(Error::InvalidColor(format!("{} -> {}", from, to)));
+                }
+                Ok((from, to))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        self.theme_map = norm;
+        self.dirty = true;
         Ok(())
     }
 
@@ -285,20 +346,101 @@ impl PptxDocument {
     ///   original parts (see `merge_and_write`).
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), Error> {
         if self.is_new {
-            self.pres.save_to_file(path).map_err(Error::OfficeToolkit)?;
+            if self.theme_map.is_empty() {
+                self.pres.save_to_file(path).map_err(Error::OfficeToolkit)?;
+                return Ok(());
+            }
+            let out_buf = self.pres.write_to(Cursor::new(Vec::new()))?;
+            let mut merged = Package::read_from(Cursor::new(out_buf.get_ref()))?;
+            remap_package_colors(&mut merged, &self.theme_map);
+            let mut file = File::create(path)?;
+            merged.write_to(&mut file)?;
             return Ok(());
         }
         if !self.dirty {
             std::fs::write(path, &self.orig_bytes)?;
             return Ok(());
         }
-        merge_and_write(&self.pres, &self.orig, path)
+        merge_and_write(&self.pres, &self.orig, &self.theme_map, path)
     }
+}
+
+/// True for a 6-digit lowercase hex color.
+fn is_hex6(s: &str) -> bool {
+    s.len() == 6 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// Rewrite every matching `val="…"` color occurrence in a package's XML parts
+/// in one pass (no chained re-mapping), leaving non-XML parts untouched.
+fn remap_package_colors(pkg: &mut Package, map: &[(String, String)]) {
+    if map.is_empty() {
+        return;
+    }
+    let needles: Vec<(Vec<char>, String)> = map
+        .iter()
+        .map(|(f, t)| {
+            (
+                format!("val=\"{}\"", f).to_ascii_lowercase().chars().collect(),
+                format!("val=\"{}\"", t),
+            )
+        })
+        .collect();
+    let needle_len = needles[0].0.len();
+    let mut updated: Vec<opc_ooxml::Part> = Vec::new();
+    for part in pkg.parts() {
+        if !part.name.ends_with(".xml") {
+            continue;
+        }
+        let Ok(text) = std::str::from_utf8(&part.data) else {
+            continue;
+        };
+        let remapped = remap_colors_ci(text, &needles, needle_len);
+        if remapped == *text {
+            continue;
+        }
+        let mut next = part.clone();
+        next.data = remapped.into_bytes();
+        updated.push(next);
+    }
+    for part in updated {
+        pkg.add_part(part);
+    }
+}
+
+/// Single scan: any `val="hex"` occurrence (case-insensitive) matching one of
+/// the needles is replaced; everything else passes through unchanged.
+fn remap_colors_ci(text: &str, needles: &[(Vec<char>, String)], needle_len: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let lower: Vec<char> = chars.iter().map(|c| c.to_ascii_lowercase()).collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i + needle_len <= lower.len() {
+        match needles.iter().find(|(n, _)| &lower[i..i + needle_len] == n.as_slice()) {
+            Some((_, repl)) => {
+                out.push_str(repl);
+                i += needle_len;
+            }
+            None => {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    while i < chars.len() {
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
 }
 
 /// Serialize the model, then merge in the original parts the writer dropped, and
 /// write the result to `path`.
-fn merge_and_write(pres: &Presentation, orig: &Package, path: impl AsRef<Path>) -> Result<(), Error> {
+fn merge_and_write(
+    pres: &Presentation,
+    orig: &Package,
+    theme_map: &[(String, String)],
+    path: impl AsRef<Path>,
+) -> Result<(), Error> {
     let out_buf = pres.write_to(Cursor::new(Vec::new()))?;
     let mut merged = Package::read_from(Cursor::new(out_buf.get_ref()))?;
 
@@ -332,6 +474,8 @@ fn merge_and_write(pres: &Presentation, orig: &Package, path: impl AsRef<Path>) 
             target_mode: rel.target_mode,
         });
     }
+
+    remap_package_colors(&mut merged, theme_map);
 
     let mut file = File::create(path)?;
     merged.write_to(&mut file)?;

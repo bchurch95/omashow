@@ -5,6 +5,15 @@
 
 const NON_SOLID_FILLS = new Set(["none", "gradient", "pattern", "image"]);
 
+// Theme engine (sorter mode): when a deck-wide theme is active, every
+// solid color is looked up in window.themeRemap (lowercase hex without "#"
+// -> replacement CSS color) before painting. null means "original colors".
+function themeColor(c) {
+  if (!c || !window.themeRemap) return c;
+  const key = String(c).replace(/^#/, "").toLowerCase();
+  return window.themeRemap[key] || c;
+}
+
 function renderSlideInto(container, content, mini = false) {
   container.querySelectorAll(".slide-shape,.slide-pic").forEach((el) => el.remove());
   const dims = content.slide_dimensions;
@@ -36,10 +45,12 @@ function drawShapes(container, shapes, pxPerEmu, pxPerInch, mini) {
     el.className = "slide-shape";
     el.dataset.shapeId = sh.id;
     place(el, sh.bounds, pxPerEmu);
-    if (sh.fill && !NON_SOLID_FILLS.has(sh.fill)) el.style.background = sh.fill;
-    if (sh.line && sh.line.color && sh.line.width_emu) {
+    const fill = themeColor(sh.fill);
+    if (fill && !NON_SOLID_FILLS.has(fill)) el.style.background = fill;
+    const lineColor = themeColor(sh.line && sh.line.color);
+    if (sh.line && lineColor && sh.line.width_emu) {
       const bw = Math.max(mini ? 1 : 0.5, (sh.line.width_emu / 914400) * pxPerInch);
-      el.style.border = bw + "px solid " + sh.line.color;
+      el.style.border = bw + "px solid " + lineColor;
     }
     if (sh.runs.length) {
       const basePt = sh.placeholder === "title" || sh.placeholder === "ctrTitle" ? 28 : 18;
@@ -79,7 +90,8 @@ function appendRuns(el, runs, pxPerInch, mini = false) {
     s.textContent = r.text;
     if (r.bold) s.style.fontWeight = "700";
     if (r.italic) s.style.fontStyle = "italic";
-    if (r.color) s.style.color = r.color;
+    const rc = themeColor(r.color);
+    if (rc) s.style.color = rc;
     // Explicit sans fallback: an unknown family (e.g. Calibri on Linux) would
     // otherwise degrade to the browser's default serif.
     if (r.font_family) s.style.fontFamily = r.font_family + ", system-ui, sans-serif";

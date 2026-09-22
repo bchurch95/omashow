@@ -57,7 +57,7 @@
   - Left pane: `CURRENT` slide view with build stepper dots (`Build X of Y — Ready · Next to continue`), previous/next controls.
   - Right pane: `NEXT` thumbnail preview, `SPEAKER NOTES` with font zoom controls (`A- A A+`), and `PRESENTATION CONTROLS` (dual timers: elapsed with pause/restart + target countdown, and `Black`, `White`, `Freeze` screen shutters).
   - Bottom pane: persistent horizontal `SLIDE NAVIGATOR` filmstrip bar.
-- [ ] Full-Screen Slide Sorter Mode (`SORTER`):
+- [x] Full-Screen Slide Sorter Mode (`SORTER`): (full-screen multi-column thumbnail grid; session-local sections with collapsible/renameable/dividable headers; per-card ◀/▶ moves + HTML5 drag-and-drop batch reordering via `reorder_slides` (single undo step, permutation-validated); global Theme Engine with Original/green/blue/sunset/mono swatches — live recolor through `window.themeRemap` in the shared renderer, and `apply_theme` persisting a case-insensitive, idempotent `srgbClr val="…"` remap across all XML parts on save. E2e-pixel-verified on Xvfb: grid render, section add/collapse/expand, move round-trip, live theme recolor, apply-to-deck XML remap, Done → edit restore with correct stage fit.)
   - Multi-column thumbnail grid with section headers and collapsible dividers (e.g. `OPENING (1-3)`, `FILE NAMING (4-7)`).
   - Drag-and-drop batch slide reordering across sections.
   - Global Theme Engine: instant live recoloring of all slides across the entire deck via design tokens (as shown in `04_sorter_green_theme.png` → `05_sorter_blue_theme.png`).
@@ -85,3 +85,10 @@
 - [ ] SmartArt diagrams: office-toolkit mis-parses `dgm:relIds` (diagram parts) as chart relationships and rejects the package. Fix upstream (or vendor + patch) so SmartArt slides open; then promote `m365_smartart.bin` from `KNOWN_REJECTIONS` to `FIXTURES`.
 - [ ] Legacy OLE objects / `mc:AlternateContent`: same rejection path (see `m365_bug64693.bin`). Model or gracefully skip `p:oleObj` so the rest of the slide still renders.
 - [ ] Genuine Google Slides and Keynote export fixtures: requires licensed/first-party sample decks (no public corpus found); add once available.
+
+## Packaging & Platform Distribution
+- [ ] Fix Linux AppImage WebKitGTK crash on Wayland/Mesa: Update runner from ubuntu-22.04 to ubuntu-24.04 and exclude bundled libwayland-client from AppImage (prevents `undefined symbol: wl_fixes_interface` and surfaceless EGL abort on modern hosts like Arch/Omarchy; see `DEBUG_APPIMAGE_CRASH.md`).
+- [ ] Single-Monitor Fullscreen Presentation & Solid Opacity:
+  - In `startPresentation()` / `enterPresent()`: automatically trigger `set_fullscreen(true)` on the main window when entering presentation mode, and restore `set_fullscreen(false)` on `exitPresent()` / `Esc`, completely covering the desktop so wallpaper and panel gaps are never visible during a presentation.
+  - On single-monitor setups, prevent floating preview window clutter over the active presenter console.
+  - Ensure window opacity is 100% solid with `#000000`/`#0f1117` backing so window managers (e.g. Hyprland in Omarchy) do not bleed desktop wallpapers through.
