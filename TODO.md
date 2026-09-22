@@ -40,20 +40,34 @@
 ## Milestone 6: Image Extraction & Multi-Vendor Corpus Testing (Complete)
 - [x] Support `<p:pic>` shape extraction and map embedded media relationships (`ppt/media/*`).
 - [x] Render embedded slide pictures inside the Tauri slide canvas. (Editor canvas, filmstrip thumbnails, presenter console and audience window; `ShapeInfo.pic` carries format + data URI, e2e-verified under Xvfb.)
-- [x] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote. (8 Apache-2.0 Apache POI fixtures: M365 PowerPoint 2007–2016 Windows + macOS, LibreOffice 5–25; no public corpus carries genuine Google Slides/Keynote exports — gap documented in `tests/fixtures/README.md`, tracked under Stretch. Two SmartArt/OLE fixtures pinned as `KNOWN_REJECTIONS` with a stable non-panicking error contract.)
+- [x] Add multi-vendor test suite in `crates/omashow-core/tests/corpus.rs` verifying decks from Google Slides, M365, and Keynote. (8 Apache-2.0 Apache POI fixtures: M365 PowerPoint 2007–2016 Windows + macOS, LibreOffice 5–25; two SmartArt/OLE fixtures pinned as `KNOWN_REJECTIONS` with a stable non-panicking error contract.)
 - [x] Add negative tests ensuring corrupt PPTX files fail gracefully with typed `Result` errors. (6 cases in `tests/corrupt.rs`: empty file, garbage bytes, truncated zip, missing `[Content_Types].xml`, invalid content-types XML, corrupted slide XML.)
 
 ## Milestone 7: Presenter Stage Tools & Export Engine (PDF & Web)
 - [x] Virtual Laser Pointer: Holding `Ctrl` or selecting pointer tool projects a glowing laser dot onto the audience screen synchronized with cursor movement. (Ctrl-hold + console toggle button; dot follows cursor 1:1 in slide space, e2e-verified on Xvfb.)
 - [x] Live Slide Drawing & Highlighter: Transparent SVG overlay for in-show pen/marker annotation over active slides (per-slide ink storage, undo/clear, `D`/`M`/`U`/`C` shortcuts, live sync to audience). E2e-pixel-verified on Xvfb. Also fixed placeholder geometry inheritance (slide→layout→master) so python-pptx decks no longer render blank.
 - [x] Slide Grid Navigator: Hitting `G` during presentation displays a full-screen thumbnail matrix to jump directly to any slide. (G toggles, Esc closes then exits, footer button; thumbnails render live slide content with number badges + title labels, current slide highlighted, click jumps and syncs to audience. E2e-pixel-verified on Xvfb.)
-- [ ] Vector PDF Export: Implement `omashow-cli export-pdf <deck.pptx> <out.pdf>` and a Tauri "Export to PDF" dialog with 1:1 vector precision.
+- [x] Vector PDF Export: Implement `omashow-cli export-pdf <deck.pptx> <out.pdf>` and a Tauri "Export to PDF" dialog with 1:1 vector precision. (printpdf-based vector writer in `crates/omashow-core/src/export_pdf.rs`: per-slide pages sized from `sldSz`, EMU-accurate shape fills/outlines, font-mapped text with paragraph line breaks, embedded pictures via image decoding; `omashow export-pdf` CLI subcommand + Tauri `export_pdf` command wired to a Save dialog. 4 integration + 5 unit tests; CLI and in-app save-dialog e2e pixel-verified on Xvfb.)
 - [ ] Standalone HTML5 Bundle Export: Export presentation as an offline, single-file HTML presentation viewable in any browser.
 
-## Milestone 8: Slide Transitions & Build Animations (Keynote-Grade Fluidity)
-- [ ] Slide Transitions: Implement hardware-accelerated CSS transitions between slides (Fade, Push, Slide, Wipe).
-- [ ] Magic Move / Morph: Detect shapes with matching IDs/names across consecutive slides and interpolate position, scale, and opacity smoothly.
-- [ ] Element Build Animations: Support `On Click` sequential reveals for text bullet points and shapes (Fade In, Fly In from bottom/left).
+## Milestone 8: Official OmaShow UI Suite & Visual Polish (Matching Video Demo Specs)
+*Reference: `design_spec/OMASHOW_UI_SPEC.md` and screenshots in `design_spec/screenshots/`*
+- [ ] Top Mode Bar Switcher: Implement the 7 primary application modes (`EDIT`, `DESIGN`, `ANIMATE`, `REVIEW`, `PRESENT`, `EXPORT`, `SORTER`) with active tab states and keyboard shortcuts.
+- [ ] Presenter Console 3-Pane Layout:
+  - Left pane: `CURRENT` slide view with build stepper dots (`Build X of Y — Ready · Next to continue`), previous/next controls.
+  - Right pane: `NEXT` thumbnail preview, `SPEAKER NOTES` with font zoom controls (`A- A A+`), and `PRESENTATION CONTROLS` (dual timers: elapsed with pause/restart + target countdown, and `Black`, `White`, `Freeze` screen shutters).
+  - Bottom pane: persistent horizontal `SLIDE NAVIGATOR` filmstrip bar.
+- [ ] Full-Screen Slide Sorter Mode (`SORTER`):
+  - Multi-column thumbnail grid with section headers and collapsible dividers (e.g. `OPENING (1-3)`, `FILE NAMING (4-7)`).
+  - Drag-and-drop batch slide reordering across sections.
+  - Global Theme Engine: instant live recoloring of all slides across the entire deck via design tokens (as shown in `04_sorter_green_theme.png` → `05_sorter_blue_theme.png`).
+- [ ] Floating Stage Tools & Filmstrip Polish (`EDIT`):
+  - Floating stage tool pill with `Pen`, `Freehand`, `Nodes` vector pen, and `Snap to guides` toggle button.
+  - Filmstrip section headers with slide counts and action badges (✨ AI / ✏️ Edit title).
+- [ ] Animation Engine & Timeline (`ANIMATE`):
+  - Multi-track timeline ruler in seconds (`0.0, 0.5, 1.0, 1.5...`), object duration bars, playhead scrubber, and speed selector (`1x`, `0.5x`, `2x`).
+  - Build Inspector with Build In/Out timing (`At time`, `On click`, `With/After previous`), duration, and easing curves.
+  - Morph slide transitions: automatically detect matching shape names/IDs across consecutive slides and interpolate position, scale, and opacity smoothly.
 
 ## Milestone 9: Rich Media, Audio/Video & Tables
 - [ ] Embedded Audio & Video Playback: Play slide media parts (`ppt/media/*.mp4`, `.wav`) with auto-play on slide entry, looping, and pause controls.
@@ -68,7 +82,6 @@
 - [ ] Background AirPlay video stream mode allowing complete app minimization while keeping audience slides active.
 
 ## Stretch: office-toolkit reader gaps & vendor coverage (tracked, not blocking)
-
 - [ ] SmartArt diagrams: office-toolkit mis-parses `dgm:relIds` (diagram parts) as chart relationships and rejects the package. Fix upstream (or vendor + patch) so SmartArt slides open; then promote `m365_smartart.bin` from `KNOWN_REJECTIONS` to `FIXTURES`.
 - [ ] Legacy OLE objects / `mc:AlternateContent`: same rejection path (see `m365_bug64693.bin`). Model or gracefully skip `p:oleObj` so the rest of the slide still renders.
 - [ ] Genuine Google Slides and Keynote export fixtures: requires licensed/first-party sample decks (no public corpus found); add once available.

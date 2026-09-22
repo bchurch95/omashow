@@ -17,6 +17,7 @@ enum Commands {
     Save { input: String, output: String },
     List { input: String },
     Export { input: String, output: String },
+    ExportPdf { input: String, output: String },
     Edit { input: String, output: String, slide: usize, title: String },
     Inspect { input: String },
 }
@@ -67,6 +68,11 @@ fn main() -> anyhow::Result<()> {
             let model = open_pptx(&input)?;
             std::fs::write(&output, serde_json::to_string_pretty(&model)?)?;
             println!("Exported {} -> {}", input, output);
+        }
+        Commands::ExportPdf { input, output } => {
+            let doc = PptxDocument::open(&input)?;
+            doc.export_pdf(&output)?;
+            println!("Exported {} slides -> {}", doc.slide_count(), output);
         }
         Commands::Edit { input, output, slide, title } => {
             let mut model = open_pptx(&input)?;

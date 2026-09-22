@@ -22,4 +22,10 @@ pub enum Error {
 
     #[error("No shape with id {0} on the slide")]
     ShapeNotFound(u32),
+
+    #[error("PDF export error: {0}")]
+    Pdf(#[from] printpdf::Error),
+
+    #[error("Image decode error: {0}")]
+    Image(String),
 }

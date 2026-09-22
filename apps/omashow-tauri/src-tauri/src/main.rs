@@ -35,6 +35,7 @@ fn main() {
             save_pptx,
             save_as,
             save_presentation,
+            export_pdf,
             get_slide_content,
             set_title,
             set_notes,
@@ -186,6 +187,14 @@ fn save_as(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String
     let doc = deck.doc.as_ref().ok_or("no presentation open")?;
     doc.save(&path).map_err(|e| e.to_string())?;
     deck.path = Some(path.clone());
+    Ok(path)
+}
+
+#[tauri::command]
+fn export_pdf(path: String, state: State<'_, Mutex<Deck>>) -> Result<String, String> {
+    let deck = state.lock().map_err(|e| e.to_string())?;
+    let doc = deck.doc.as_ref().ok_or("no presentation open")?;
+    doc.export_pdf(&path).map_err(|e| e.to_string())?;
     Ok(path)
 }
 

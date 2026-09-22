@@ -5,6 +5,7 @@ use office_toolkit::drawing::{ShapeProperties, TextBody, TextParagraph, TextPara
 use model::text_body_from_string;
 
 pub mod error;
+pub mod export_pdf;
 pub mod model;
 pub mod io;
 pub mod document;

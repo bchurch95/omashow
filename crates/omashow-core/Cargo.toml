@@ -10,6 +10,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "1"
 base64 = "0.22"
+printpdf = { version = "0.7.0", features = ["embedded_images"] }
+image = { version = "0.24", default-features = false, features = ["jpeg", "png", "bmp", "gif"] }
 
 [dev-dependencies]
 zip = "8"
