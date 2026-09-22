@@ -18,6 +18,7 @@ enum Commands {
     List { input: String },
     Export { input: String, output: String },
     ExportPdf { input: String, output: String },
+    ExportHtml { input: String, output: String },
     Edit { input: String, output: String, slide: usize, title: String },
     Inspect { input: String },
 }
@@ -72,6 +73,11 @@ fn main() -> anyhow::Result<()> {
         Commands::ExportPdf { input, output } => {
             let doc = PptxDocument::open(&input)?;
             doc.export_pdf(&output)?;
+            println!("Exported {} slides -> {}", doc.slide_count(), output);
+        }
+        Commands::ExportHtml { input, output } => {
+            let doc = PptxDocument::open(&input)?;
+            doc.export_html(&output)?;
             println!("Exported {} slides -> {}", doc.slide_count(), output);
         }
         Commands::Edit { input, output, slide, title } => {

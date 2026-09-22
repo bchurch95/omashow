@@ -702,6 +702,17 @@ $("btn-exportpdf").onclick = async () => {
   } catch (e) { flash(String(e), "err"); }
 };
 
+$("btn-exporthtml").onclick = async () => {
+  if (!model) { flash("nothing to export", "err"); return; }
+  try {
+    const path = await invoke("save_file_dialog");
+    if (!path) return;
+    flash("rendering HTML bundle…");
+    const p = await invoke("export_html", { path });
+    flash(`HTML exported: ${p}`);
+  } catch (e) { flash(String(e), "err"); }
+};
+
 const zoomRange = $("zoom-range");
 const zoomPct = $("zoom-pct");
 function syncZoomUI() {
