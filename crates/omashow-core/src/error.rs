@@ -28,4 +28,7 @@ pub enum Error {
 
     #[error("Image decode error: {0}")]
     Image(String),
+
+    #[error("Invalid theme color: {0}")]
+    InvalidColor(String),
 }

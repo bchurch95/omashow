@@ -78,8 +78,11 @@ function fitCanvas() {
   }
   // While presenting, #preview-wrap already shrinks to make room for the
   // console side panel, so its box is the right reference in both modes.
-  const availW = Math.max(100, $("preview-wrap").clientWidth - 56);
-  const availH = Math.max(100, $("preview-wrap").clientHeight - 56);
+  const wrapW = $("preview-wrap").clientWidth;
+  const wrapH = $("preview-wrap").clientHeight;
+  if (wrapW < 50 || wrapH < 50) return; // sorter mode: stage hidden, keep last fit
+  const availW = Math.max(100, wrapW - 56);
+  const availH = Math.max(100, wrapH - 56);
   let w = availW;
   let h = (w * d.height_emu) / d.width_emu;
   if (h > availH) { h = availH; w = (h * d.width_emu) / d.height_emu; }
@@ -101,20 +104,31 @@ let presentHideTimer = null;
 function enterPresent() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
   document.body.classList.add("presenting");
+  // Fullscreen the whole document (not just #main) so the presenter
+  // topbar, a sibling of the content area, stays visible.
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+  setShutter("clear");
   paintCurrentSlide();
   updateConsole();
+  updateBuildStepper();
   startTimer();
 }
 function exitPresent() {
   document.body.classList.remove("presenting");
   document.body.classList.remove("chrome-visible");
   stopTimer();
+  shutter = "clear";
+  ["black", "white", "freeze"].forEach((m) => $("btn-shutter-" + m).classList.remove("on"));
   laserTool = false;
   laserCtrl = false;
   $("btn-laser").classList.remove("on");
   resetInk();
   emitToAudience("laser-move", { on: false });
   invoke("close_audience_window").catch(() => {});
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  resetModeToEdit();
 }
 
 // ---------- slide grid navigator: G while presenting ----------
@@ -159,21 +173,34 @@ function toggleSlideGrid() {
   else openSlideGrid();
 }
 
-// ---------- presenter console: next slide, notes, timer ----------
+// ---------- presenter console: timers, target countdown ----------
 let presentStart = 0;
 let timerInt = null;
-function fmtElapsed(ms) {
-  const s = Math.floor(ms / 1000);
+let timerPaused = false;
+let pausedElapsedMs = 0;
+let targetMinutes = 20;
+function fmtHMS(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  const mm = String(m).padStart(2, "0"), sec = String(ss).padStart(2, "0");
-  return h ? h + ":" + mm + ":" + sec : mm + ":" + sec;
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+}
+function elapsedMs() {
+  return timerPaused ? pausedElapsedMs : Date.now() - presentStart;
 }
 function tickTimer() {
-  $("timer-elapsed").textContent = fmtElapsed(Date.now() - presentStart);
+  $("timer-elapsed").textContent = fmtHMS(elapsedMs());
+  const targetMs = targetMinutes * 60000;
+  const remaining = Math.max(0, targetMs - elapsedMs());
+  const cd = $("timer-countdown");
+  cd.textContent = fmtHMS(remaining);
+  cd.classList.toggle("low", remaining < targetMs * 0.1);
   $("timer-clock").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 function startTimer() {
   presentStart = Date.now();
+  timerPaused = false;
+  pausedElapsedMs = 0;
+  $("btn-timer-pause").textContent = "Pause";
   tickTimer();
   clearInterval(timerInt);
   timerInt = setInterval(tickTimer, 1000);
@@ -182,33 +209,189 @@ function stopTimer() {
   clearInterval(timerInt);
   timerInt = null;
 }
+function toggleTimerPause() {
+  if (!presenting()) return;
+  if (timerPaused) {
+    presentStart = Date.now() - pausedElapsedMs;
+    timerPaused = false;
+    $("btn-timer-pause").textContent = "Pause";
+  } else {
+    pausedElapsedMs = Date.now() - presentStart;
+    timerPaused = true;
+    $("btn-timer-pause").textContent = "Resume";
+  }
+  tickTimer();
+}
+function restartTimer() {
+  if (!presenting()) return;
+  startTimer();
+}
+$("btn-timer-pause").addEventListener("click", toggleTimerPause);
+$("btn-timer-restart").addEventListener("click", restartTimer);
+$("target-input").addEventListener("change", () => {
+  const v = parseInt($("target-input").value, 10);
+  if (Number.isFinite(v) && v >= 1 && v <= 600) {
+    targetMinutes = v;
+    tickTimer();
+  } else {
+    $("target-input").value = String(targetMinutes);
+  }
+});
 
+// Build stepper: each slide has a single build until the M8 animation
+// engine lands; the label and dots track the state the timeline will own.
+const BUILDS_PER_SLIDE = 1;
+function updateBuildStepper() {
+  const cur = 1, total = BUILDS_PER_SLIDE;
+  $("build-label").textContent = "Build " + cur + " of " + total + " — Ready · Next to continue";
+  const dots = $("build-dots");
+  dots.innerHTML = "";
+  for (let b = 1; b <= total; b++) {
+    const d = document.createElement("span");
+    d.className = "build-dot" + (b <= cur ? " done" : "");
+    dots.appendChild(d);
+  }
+}
 function updateConsole() {
   if (!model) return;
   $("console-notes").textContent = currentSlide >= 0 ? (model.slides[currentSlide].notes || "") : "";
-  if (currentSlide < 0) { $("next-label").textContent = "—"; return; }
+  if (currentSlide >= 0) {
+    $("current-sub").textContent = "Slide " + (currentSlide + 1) + " of " + model.slides.length;
+    $("ps-left").textContent =
+      "Slide " + (currentSlide + 1) + " of " + model.slides.length + " · Build 1 of " + BUILDS_PER_SLIDE;
+  } else {
+    $("current-sub").textContent = "—";
+    $("ps-left").textContent = "—";
+  }
+  if (currentSlide < 0) { $("next-sub").textContent = "—"; return; }
   const next = currentSlide + 1;
   if (next < model.slides.length) {
     const t = model.slides[next].title;
-    $("next-label").textContent = "Slide " + (next + 1) + (t ? " — " + t : "");
+    $("next-sub").textContent = "Slide " + (next + 1) + " of " + model.slides.length + (t ? " — " + t : "");
     fetchSlideContent(next);
     const cached = slideContents.get(next);
     if (cached) renderSlideInto($("next-thumb"), cached, true);
   } else {
-    $("next-label").textContent = "End of deck";
+    $("next-sub").textContent = "End of deck";
+  }
+  updateBuildStepper();
+}
+// ---------- bottom slide navigator (present mode) ----------
+function renderNavigator() {
+  const cells = $("nav-cells");
+  cells.innerHTML = "";
+  if (!model) return;
+  model.slides.forEach((s, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "nav-cell" + (i === currentSlide ? " current" : "");
+    cell.title = "Slide " + (i + 1) + (s.title ? " — " + s.title : "");
+    const thumb = document.createElement("div");
+    thumb.className = "nav-thumb";
+    const idx = document.createElement("span");
+    idx.className = "nav-idx";
+    idx.textContent = String(i + 1);
+    thumb.appendChild(idx);
+    const cap = document.createElement("span");
+    cap.className = "nav-cap";
+    cap.textContent = s.title || "(no title)";
+    cell.append(thumb, cap);
+    cell.addEventListener("click", () => selectSlide(i));
+    cells.appendChild(cell);
+    const cached = slideContents.get(i);
+    if (cached) renderSlideInto(thumb, cached, true);
+  });
+  const active = cells.querySelector(".nav-cell.current");
+  if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+function refreshNavigatorActive() {
+  document.querySelectorAll("#nav-cells .nav-cell").forEach((el, j) => {
+    el.classList.toggle("current", j === currentSlide);
+  });
+  const active = document.querySelector("#nav-cells .nav-cell.current");
+  if (active) active.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+// Notes font zoom: A- / A / A+ in the console notes card.
+let notesFontPx = 14;
+function setNotesZoom(px) {
+  notesFontPx = Math.min(24, Math.max(11, px));
+  $("console-notes").style.fontSize = notesFontPx + "px";
+}
+$("notes-zoom-out").addEventListener("click", () => setNotesZoom(notesFontPx - 1));
+$("notes-zoom-in").addEventListener("click", () => setNotesZoom(notesFontPx + 1));
+$("notes-zoom-reset").addEventListener("click", () => setNotesZoom(14));
+// Previous / Next buttons in the current-slide footer.
+$("btn-prev").addEventListener("click", () => {
+  if (model && currentSlide > 0) selectSlide(currentSlide - 1);
+});
+$("btn-next").addEventListener("click", () => {
+  if (!model) return;
+  if (currentSlide < model.slides.length - 1) selectSlide(currentSlide + 1);
+  else flash("end of deck");
+});
+// ---------- audience display selection (top bar) ----------
+async function refreshMonitorSelect() {
+  const sel = $("monitor-select");
+  try {
+    const monitors = await invoke("list_monitors");
+    sel.innerHTML = "";
+    sel.disabled = !monitors.length;
+    monitors.forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.name;
+      opt.textContent = m.name + " · " + m.width + " × " + m.height + (m.is_primary ? " (primary)" : "");
+      sel.appendChild(opt);
+    });
+  } catch {
+    sel.disabled = true;
   }
 }
+function setPresentStatusRight(audienceLabel) {
+  $("ps-right").textContent = "Presenting — holding notifications" + (audienceLabel ? " · Audience: " + audienceLabel : "");
+}
+$("monitor-select").addEventListener("change", async () => {
+  const name = $("monitor-select").value;
+  if (!name || !presenting()) return;
+  try {
+    await invoke("open_audience_window", { monitorName: name });
+    setPresentStatusRight(name);
+    flash("audience on " + name);
+  } catch (e) { flash(String(e), "err"); }
+});
+$("btn-swap-displays").addEventListener("click", () => {
+  const sel = $("monitor-select");
+  if (sel.options.length < 2) { flash("need two displays to swap", "err"); return; }
+  sel.selectedIndex = (sel.selectedIndex + 1) % sel.options.length;
+  sel.dispatchEvent(new Event("change"));
+});
+$("btn-end-show").addEventListener("click", exitPresent);
 
 // ---------- audience window event sync ----------
-function emitToAudience(event, payload) {
-  const ev = window.__TAURI__ && window.__TAURI__.event;
-  if (ev) ev.emit(event, payload).catch(() => {});
+// Audience screen shutter: clear | black | white | freeze. Freeze holds the
+// projected frame while the presenter browses ahead in the console.
+let shutter = "clear";
+function audienceFrozen() {
+  return presenting() && shutter === "freeze";
 }
-let blackedOut = false;
+function setShutter(mode) {
+  if (!presenting() && mode !== "clear") return;
+  shutter = mode;
+  emitToAudience("shutter", { mode: mode === "freeze" ? "clear" : mode });
+  ["black", "white", "freeze"].forEach((m) => {
+    $("btn-shutter-" + m).classList.toggle("on", shutter === m);
+  });
+}
 function toggleBlackout() {
   if (!presenting()) return;
-  blackedOut = !blackedOut;
-  emitToAudience("blackout-toggle", { on: blackedOut });
+  setShutter(shutter === "black" ? "clear" : "black");
+}
+$("btn-shutter-black").addEventListener("click", () => setShutter(shutter === "black" ? "clear" : "black"));
+$("btn-shutter-white").addEventListener("click", () => setShutter(shutter === "white" ? "clear" : "white"));
+$("btn-shutter-freeze").addEventListener("click", () => setShutter(shutter === "freeze" ? "clear" : "freeze"));
+function emitToAudience(event, payload) {
+  if (audienceFrozen() && (event === "slide-changed" || event === "ink" || event === "laser-move")) return;
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if (ev) ev.emit(event, payload).catch(() => {});
 }
 
 // ---------- laser pointer: dot on the audience screen follows the cursor ----------
@@ -386,13 +569,16 @@ $("btn-ink-clear").onclick = inkClear;
 async function startPresentation() {
   if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
   enterPresent();
+  await refreshMonitorSelect();
   try {
     const name = await invoke("open_audience_window", { monitorName: null });
+    setPresentStatusRight(name);
     flash("projecting on " + name);
     emitToAudience("slide-changed", { index: currentSlide });
     setTimeout(() => emitToAudience("slide-changed", { index: currentSlide }), 200);
     setTimeout(() => emitToAudience("slide-changed", { index: currentSlide }), 600);
   } catch (e) {
+    setPresentStatusRight(null);
     flash(String(e), "err");
   }
 }
@@ -444,6 +630,10 @@ function paintSlide(i, content) {
   if (item) renderSlideInto(item.querySelector(".slide-thumb"), content, true);
   const gridThumb = document.querySelectorAll("#grid-cells .grid-thumb")[i];
   if (gridThumb) renderSlideInto(gridThumb, content, true);
+  const navThumb = document.querySelectorAll("#nav-cells .nav-thumb")[i];
+  if (navThumb) renderSlideInto(navThumb, content, true);
+  const sorterCard = document.querySelectorAll("#sorter-body .sorter-card")[i];
+  if (sorterCard) renderSlideInto(sorterCard.querySelector(".sorter-thumb"), content, true);
   if (i === currentSlide) {
     fitCanvas();
     renderSlideInto($("slide-stage"), content, false);
@@ -598,6 +788,7 @@ function renderFilmstrip() {
     const cached = slideContents.get(i);
     if (cached) renderSlideInto(thumb, cached, true);
   });
+  renderNavigator();
 }
 
 // ---------- selection ----------
@@ -626,6 +817,7 @@ function selectSlide(i) {
   document.querySelectorAll("#grid-cells .grid-cell").forEach((el, j) => {
     el.classList.toggle("current", j === i);
   });
+  refreshNavigatorActive();
   const active = document.querySelectorAll(".slide-item")[i];
   if (active) active.scrollIntoView({ block: "nearest" });
   paintCurrentSlide();
@@ -696,7 +888,7 @@ $("btn-saveas").onclick = async () => {
   } catch (e) { flash(String(e), "err"); }
 };
 
-$("btn-exportpdf").onclick = async () => {
+async function doExportPdf() {
   if (!model) { flash("nothing to export", "err"); return; }
   try {
     const path = await invoke("save_file_dialog");
@@ -705,9 +897,9 @@ $("btn-exportpdf").onclick = async () => {
     const p = await invoke("export_pdf", { path });
     flash(`PDF exported: ${p}`);
   } catch (e) { flash(String(e), "err"); }
-};
+}
 
-$("btn-exporthtml").onclick = async () => {
+async function doExportHtml() {
   if (!model) { flash("nothing to export", "err"); return; }
   try {
     const path = await invoke("save_file_dialog");
@@ -716,7 +908,417 @@ $("btn-exporthtml").onclick = async () => {
     const p = await invoke("export_html", { path });
     flash(`HTML exported: ${p}`);
   } catch (e) { flash(String(e), "err"); }
+}
+
+$("btn-exportpdf").onclick = doExportPdf;
+$("btn-exporthtml").onclick = doExportHtml;
+$("panel-export-pdf").onclick = doExportPdf;
+$("panel-export-html").onclick = doExportHtml;
+
+// ---------- sorter: deck grid, sections, batch reorder, themes ----------
+const SORTER_THEMES = {
+  green:  { accent: "#7fb069", accent2: "#a3c585", accent3: "#d4e8b8" },
+  blue:   { accent: "#3d8bfd", accent2: "#7fb2f7", accent3: "#b8d4f7" },
+  sunset: { accent: "#e07b39", accent2: "#f2a65a", accent3: "#f7d4b8" },
+  mono:   { accent: "#9aa3b5", accent2: "#c2c9d6", accent3: "#e2e6ee" },
 };
+// Sections partition the deck by counts (session-local, never written to the
+// PPTX): the i-th section spans slides [sum(counts[0..i)), +count[i]).
+let sorterSections = [];
+let sorterSel = new Set();
+let sorterTheme = "none";
+let sorterThemeApplied = false;
+
+function enterSorter() {
+  if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+  const n = model.slides.length;
+  const total = sorterSections.reduce((a, s) => a + s.count, 0);
+  if (!sorterSections.length || total !== n) {
+    sorterSections = [{ name: "All slides", count: n, collapsed: false }];
+  }
+  sorterSel = new Set();
+  sorterTheme = "none";
+  sorterThemeApplied = false;
+  if (window.themeRemap) { window.themeRemap = null; }
+  document.querySelectorAll("#sorter-themes .theme-swatch").forEach((b) =>
+    b.classList.toggle("on", b.dataset.theme === "none"));
+  refreshThumbs();
+  renderSorter();
+}
+
+function renderSorter() {
+  const body = $("sorter-body");
+  if (!model) return;
+  body.innerHTML = "";
+  $("sorter-count").textContent = "Sorter — " + model.slides.length + " slides";
+  let start = 0;
+  sorterSections.forEach((sec, si) => {
+    const end = start + sec.count;
+    const secEl = document.createElement("div");
+    secEl.className = "sorter-section" + (sec.collapsed ? " collapsed" : "");
+
+    const head = document.createElement("div");
+    head.className = "sorter-sec-head";
+    const chev = document.createElement("button");
+    chev.className = "sec-chev";
+    chev.textContent = "\u25be";
+    chev.title = sec.collapsed ? "Expand section" : "Collapse section";
+    chev.onclick = () => { sec.collapsed = !sec.collapsed; renderSorter(); };
+    const name = document.createElement("span");
+    name.className = "sec-name";
+    name.textContent = sec.name;
+    name.title = "Double-click to rename";
+    name.ondblclick = () => renameSection(sec, name);
+    const range = document.createElement("span");
+    range.className = "sec-range";
+    range.textContent = sec.count ? (start + 1) + "\u2013" + end : "(empty)";
+    const del = document.createElement("button");
+    del.className = "sec-del";
+    del.textContent = "\u00d7";
+    del.title = "Delete section — its slides merge into the previous one";
+    del.onclick = () => deleteSection(si);
+    head.append(chev, name, range, del);
+
+    const grid = document.createElement("div");
+    grid.className = "sorter-grid";
+    for (let i = start; i < end; i++) buildSorterCard(grid, i);
+    secEl.append(head, grid);
+    body.appendChild(secEl);
+    start = end;
+  });
+  repaintSorterThumbs();
+}
+
+function buildSorterCard(grid, i) {
+  const s = model.slides[i];
+  const card = document.createElement("div");
+  card.className = "sorter-card" + (sorterSel.has(i) ? " sel" : "");
+  card.dataset.idx = i;
+  card.draggable = true;
+
+  const thumb = document.createElement("div");
+  thumb.className = "sorter-thumb";
+  const cap = document.createElement("div");
+  cap.className = "sorter-cap";
+  const num = document.createElement("span");
+  num.className = "num";
+  num.textContent = i + 1;
+  const ttl = document.createElement("span");
+  ttl.className = "ttl";
+  ttl.textContent = s.title || "(no title)";
+  const mvL = document.createElement("button");
+  mvL.className = "mv-btn";
+  mvL.textContent = "\u25c0";
+  mvL.title = "Move slide left";
+  const mvR = document.createElement("button");
+  mvR.className = "mv-btn";
+  mvR.textContent = "\u25b6";
+  mvR.title = "Move slide right";
+  cap.append(num, ttl, mvL, mvR);
+  card.append(thumb, cap);
+
+  card.addEventListener("click", (e) => {
+    if (e.target.closest("button")) return;
+    if (e.ctrlKey || e.metaKey) {
+      if (sorterSel.has(i)) sorterSel.delete(i);
+      else sorterSel.add(i);
+    } else {
+      sorterSel = new Set([i]);
+    }
+    renderSorter();
+  });
+
+  card.addEventListener("dragstart", (e) => {
+    if (!sorterSel.has(i)) sorterSel = new Set([i]);
+    card.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(i));
+  });
+  card.addEventListener("dragend", clearSorterDropMarks);
+  card.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const r = card.getBoundingClientRect();
+    const before = e.clientX - r.left < r.width / 2;
+    clearSorterDropMarks();
+    card.classList.add(before ? "drop-before" : "drop-after");
+  });
+  card.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const r = card.getBoundingClientRect();
+    const before = e.clientX - r.left < r.width / 2;
+    sorterMoveSelectionTo(before ? i : i + 1);
+  });
+
+  mvL.addEventListener("click", (e) => { e.stopPropagation(); sorterMoveSlideBy(i, -1); });
+  mvR.addEventListener("click", (e) => { e.stopPropagation(); sorterMoveSlideBy(i, 1); });
+
+  grid.appendChild(card);
+}
+
+function clearSorterDropMarks() {
+  document.querySelectorAll("#sorter-body .drop-before,#sorter-body .drop-after").forEach((c) =>
+    c.classList.remove("drop-before", "drop-after"));
+}
+
+function repaintSorterThumbs() {
+  for (const [i, c] of slideContents) paintSlide(i, c);
+}
+
+// Reorder the whole deck to `order` (a permutation of 0..n) in one undoable
+// step. The selection follows its slides across the move.
+function sorterReorderTo(order) {
+  const selBefore = Array.from(sorterSel).sort((a, b) => a - b);
+  invoke("reorder_slides", { order })
+    .then((m) => {
+      model = JSON.parse(m);
+      sorterSel = new Set(selBefore.map((k) => order.indexOf(k)));
+      sorterReconcileSections(order, selBefore);
+      slideContents.clear();
+      refreshThumbs();
+      renderSorter();
+      if (currentSlide >= model.slides.length) currentSlide = model.slides.length - 1;
+      markState("edited");
+      refreshUndoUI();
+      flash("slides reordered");
+    })
+    .catch((err) => { renderSorter(); flash(String(err), "err"); });
+}
+
+function sorterMoveSelectionTo(target) {
+  if (!model || !sorterSel.size) return;
+  const n = model.slides.length;
+  const rest = Array.from({ length: n }, (_, k) => k).filter((k) => !sorterSel.has(k));
+  const sel = Array.from(sorterSel).sort((a, b) => a - b);
+  const t = Math.max(0, Math.min(target, rest.length));
+  rest.splice(t, 0, ...sel);
+  sorterReorderTo(rest);
+}
+
+function sorterMoveSlideBy(i, dir) {
+  if (!model) return;
+  const n = model.slides.length;
+  const j = i + dir;
+  if (j < 0 || j >= n) return;
+  const order = Array.from({ length: n }, (_, k) => k);
+  order.splice(i, 1);
+  // j is the target index in the final array; after the removal the insert
+  // position is j itself (both directions).
+  order.splice(j, 0, i);
+  sorterSel = new Set([i]);
+  sorterReorderTo(order);
+}
+
+// Keep the section partition valid after a move: counts follow the slides.
+function sorterReconcileSections(order, selBefore) {
+  if (sorterSections.length <= 1) return;
+  const counts = sorterSections.map((s) => s.count);
+  const secOf = (idx) => {
+    let s = 0;
+    for (let si = 0; si < counts.length; si++) {
+      s += counts[si];
+      if (idx < s) return si;
+    }
+    return counts.length - 1;
+  };
+  for (const k of selBefore) {
+    const from = secOf(k);
+    const to = secOf(order.indexOf(k));
+    if (from !== to) { counts[from]--; counts[to]++; }
+  }
+  sorterSections.forEach((s, i) => { s.count = counts[i]; });
+}
+
+function renameSection(sec, nameEl) {
+  const input = document.createElement("input");
+  input.className = "sec-rename";
+  input.value = sec.name;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (v) sec.name = v;
+    renderSorter();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") input.blur();
+    else if (e.key === "Escape") { e.preventDefault(); done = true; renderSorter(); }
+  });
+}
+
+function deleteSection(si) {
+  if (sorterSections.length <= 1) { flash("cannot delete the only section", "err"); return; }
+  const gone = sorterSections.splice(si, 1)[0];
+  sorterSections[si > 0 ? si - 1 : 0].count += gone.count;
+  renderSorter();
+}
+
+function addSorterSection() {
+  if (!model) return;
+  const n = model.slides.length;
+  let splitAt = sorterSel.size ? Math.max(...Array.from(sorterSel)) + 1 : Math.floor(n / 2);
+  splitAt = Math.max(1, Math.min(splitAt, n - 1));
+  let s = 0;
+  for (let si = 0; si < sorterSections.length; si++) {
+    const c = sorterSections[si].count;
+    if (splitAt - 1 < s + c) {
+      const right = splitAt - s;
+      sorterSections[si].count = c - right;
+      sorterSections.splice(si + 1, 0, { name: "Section " + (si + 2), count: right, collapsed: false });
+      break;
+    }
+    s += c;
+  }
+  renderSorter();
+}
+
+// ---------- theme engine ----------
+function cssHexToRgb(h) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+}
+function isNeutralColor(c) {
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return true;
+  const [r, g, b] = cssHexToRgb(c);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lum = (max + min) / 2;
+  const sat = max === min ? 0 : (max - min) / (1 - Math.abs(2 * lum - 1));
+  return sat < 0.12 || lum < 0.05 || lum > 0.97;
+}
+
+// The deck's three most frequent saturated colors, in frequency order.
+function computeDominantColors() {
+  const score = new Map();
+  const bump = (c) => {
+    if (!c || !/^#[0-9a-f]{6}$/i.test(c) || isNeutralColor(c)) return;
+    const k = c.toLowerCase();
+    score.set(k, (score.get(k) || 0) + 1);
+  };
+  const walk = (shapes) => {
+    for (const s of shapes || []) {
+      bump(s.fill);
+      if (s.line && s.line.color) bump(s.line.color);
+      for (const r of s.runs || []) bump(r.color);
+      if (s.children) walk(s.children);
+    }
+  };
+  for (const c of slideContents.values()) walk(c.shapes);
+  return Array.from(score.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k);
+}
+
+function setSorterTheme(name) {
+  sorterTheme = name;
+  document.querySelectorAll("#sorter-themes .theme-swatch").forEach((b) =>
+    b.classList.toggle("on", b.dataset.theme === name));
+  if (name === "none") window.themeRemap = null;
+  else {
+    const t = SORTER_THEMES[name];
+    const dom = computeDominantColors();
+    // themeColor() in slide_render.js looks up bare lowercase hex, no "#".
+    const bare = (c) => c.replace(/^#/, "").toLowerCase();
+    const remap = {};
+    if (dom[0]) remap[bare(dom[0])] = t.accent;
+    if (dom[1]) remap[bare(dom[1])] = t.accent2;
+    if (dom[2]) remap[bare(dom[2])] = t.accent3;
+    window.themeRemap = remap;
+  }
+  repaintSorterThumbs();
+  paintCurrentSlide();
+}
+
+function applyThemeToDeck() {
+  if (sorterTheme === "none" || !model) { flash("pick a theme first", "err"); return; }
+  const t = SORTER_THEMES[sorterTheme];
+  const dom = computeDominantColors();
+  const map = [];
+  // the core validates bare 6-digit hex (no "#").
+  if (dom[0]) map.push([dom[0].replace(/^#/, "").toLowerCase(), t.accent]);
+  if (dom[1]) map.push([dom[1].replace(/^#/, "").toLowerCase(), t.accent2]);
+  if (dom[2]) map.push([dom[2].replace(/^#/, "").toLowerCase(), t.accent3]);
+  if (!map.length) { flash("no dominant colors found in this deck", "err"); return; }
+  invoke("apply_theme", { map })
+    .then((m) => {
+      model = JSON.parse(m);
+      sorterThemeApplied = true;
+      markState("edited");
+      slideContents.clear();
+      refreshThumbs();
+      paintCurrentSlide();
+      flash("theme applied — saved to file");
+    })
+    .catch((err) => flash(String(err), "err"));
+}
+
+$("btn-sorter-add").onclick = addSorterSection;
+$("btn-sorter-apply").onclick = applyThemeToDeck;
+$("btn-sorter-done").onclick = () => {
+  if (sorterTheme !== "none" && !sorterThemeApplied) applyThemeToDeck();
+  enterMode("edit");
+};
+document.querySelectorAll("#sorter-themes .theme-swatch").forEach((b) => {
+  b.onclick = () => setSorterTheme(b.dataset.theme);
+});
+
+// ---------- top mode bar (Alt+1…Alt+7) ----------
+const MODE_ORDER = ["edit", "design", "animate", "review", "present", "export", "sorter"];
+const MODE_COPY = {
+  design: "Masters, layouts, palettes and typography controls land in the next step of this milestone. Until then, the Edit canvas renders the deck's current master and layout exactly.",
+  animate: "Build-in effects, easing curves and the timeline land in the next step of this milestone. Slide-to-slide transitions already run in Present mode.",
+  review: "Comments, change tracking and revision history land later. For now, walk the deck in Present mode and check each shape in the Edit inspectors.",
+};
+function setModeTab(m) {
+  document.querySelectorAll("#modebar .mode").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+}
+function enterMode(m) {
+  // The console owns the layout while presenting; only PRESENT re-enters it.
+  if (presenting() && m !== "present") return;
+  if (m === "present") {
+    if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+    setModeTab("present");
+    startPresentation();
+    return;
+  }
+  if (m === "sorter") {
+    if (!model || currentSlide < 0) { flash("open a deck first", "err"); return; }
+    document.body.dataset.mode = "sorter";
+    setModeTab("sorter");
+    enterSorter();
+    return;
+  }
+  // Leaving the sorter: an unapplied theme preview dies with the mode.
+  const wasSorter = document.body.dataset.mode === "sorter";
+  if (wasSorter && !sorterThemeApplied && window.themeRemap) {
+    window.themeRemap = null;
+  }
+  if (m !== "edit" && m !== "export") {
+    $("ph-title").textContent = m[0].toUpperCase() + m.slice(1);
+    $("ph-body").textContent = MODE_COPY[m] || "";
+  }
+  document.body.dataset.mode = m;
+  setModeTab(m);
+  if (wasSorter) { fitCanvas(); paintCurrentSlide(); }
+}
+function resetModeToEdit() {
+  document.body.dataset.mode = "edit";
+  setModeTab("edit");
+}
+document.querySelectorAll("#modebar .mode").forEach((b) => {
+  b.onclick = () => enterMode(b.dataset.mode);
+});
+document.addEventListener("keydown", (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!/^Digit[1-7]$/.test(e.code)) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  e.preventDefault();
+  enterMode(MODE_ORDER[Number(e.code.slice(5)) - 1]);
+});
 
 const zoomRange = $("zoom-range");
 const zoomPct = $("zoom-pct");
@@ -874,6 +1476,11 @@ document.addEventListener("keydown", (e) => {
     }
   }
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+  if (document.body.dataset.mode === "sorter" && e.key === "Escape") {
+    e.preventDefault();
+    enterMode("edit");
+    return;
+  }
   if (presenting() && e.key === "Escape") {
     e.preventDefault();
     if (gridOpen()) closeSlideGrid();
@@ -950,6 +1557,10 @@ window.addEventListener("resize", () => {
     document.querySelectorAll(".slide-item").forEach((item, i) => {
       const cached = slideContents.get(i);
       if (cached) renderSlideInto(item.querySelector(".slide-thumb"), cached, true);
+    });
+    document.querySelectorAll("#nav-cells .nav-thumb").forEach((thumb, i) => {
+      const cached = slideContents.get(i);
+      if (cached) renderSlideInto(thumb, cached, true);
     });
     paintCurrentSlide();
   }, 200);

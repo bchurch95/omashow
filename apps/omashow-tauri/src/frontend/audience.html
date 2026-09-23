@@ -29,8 +29,15 @@
       transition: background 0.15s ease;
     }
     #slide-canvas.blackout { background: #000 !important; }
+    #slide-canvas.whiteout { background: #fff !important; }
     #slide-canvas.blackout .slide-shape,
-    #slide-canvas.blackout .slide-pic { visibility: hidden !important; }
+    #slide-canvas.blackout .slide-pic,
+    #slide-canvas.whiteout .slide-shape,
+    #slide-canvas.whiteout .slide-pic { visibility: hidden !important; }
+    #slide-canvas.blackout #ink-overlay,
+    #slide-canvas.blackout #laser,
+    #slide-canvas.whiteout #ink-overlay,
+    #slide-canvas.whiteout #laser { display: none; }
     #ink-overlay {
       position: absolute;
       top: 0;
