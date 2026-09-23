@@ -23,7 +23,7 @@ PROJECT_DIR = os.environ.get("OMASHOW_DIR", "/root/omashow")
 # Critic runs on Cortana dual-V100s via router
 API_URL = os.environ.get("VLLM_API_URL", "http://192.168.66.232:8000/v1/chat/completions")
 API_KEY = os.environ.get("VLLM_API_KEY", "sk-qcity-8246b2fb311b1271b8d3f26612521160")
-CRITIC_MODEL = os.environ.get("CRITIC_MODEL", "qwen3.8-27b")
+CRITIC_MODEL = os.environ.get("CRITIC_MODEL", "qwen-mlx")
 
 PREVIEW_IMG = os.path.join(PROJECT_DIR, "latest_ui_preview.png")
 CRITIQUE_MD = os.path.join(PROJECT_DIR, "CRITIQUE.md")
