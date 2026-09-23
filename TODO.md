@@ -74,6 +74,11 @@
 - [ ] Table Support (`a:tbl`): Extract, render, and format OpenXML tables with column widths, borders, cell margins, and background fills.
 - [ ] Smart Magnetic Connectors: Lines and arrows that dynamically anchor between shape boundary points and adjust when shapes move.
 
+## Milestone 10: Canvas Backgrounds & Layer Management
+- [ ] Slide Background Engine (`p:bg`): Support custom slide background fills (solid hex colors, linear/radial gradients, and background picture fills `p:bgRef` / `blipFill`) with live canvas preview and an "Apply to All Slides" button.
+- [ ] Z-Order Controls & Stacking: Implement Bring to Front, Send to Back, Bring Forward, and Send Backward actions with keyboard shortcuts (`Cmd/Ctrl + Shift + ] / [`), reordering elements in the DOM and preserving shape order in OOXML `p:spTree`.
+- [ ] Sidebar Layers Panel: Collapsible layers tree showing all shapes, text boxes, and media on the active slide; support click-to-select, double-click rename, visibility toggle (hide/show eye icon), lock state, and drag-and-drop layer reordering.
+
 ## Stretch Milestone: iPadOS & AirPlay External Display Support
 - [ ] Add touch navigation gestures to slide viewer (swipe left/right to advance, tap to toggle notes).
 - [ ] Configure Tauri v2 iOS/iPadOS mobile target (`cargo tauri ios`).
