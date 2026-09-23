@@ -62,7 +62,7 @@ jobs:
 
   build-linux:
     name: Linux (.AppImage & .deb)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -93,6 +93,22 @@ jobs:
         working-directory: apps/omashow-tauri
         run: |
           cargo tauri build --bundles appimage,deb
+
+      - name: Patch AppImage to remove conflicting Wayland client libraries
+        run: |
+          curl -L -s https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o /tmp/appimagetool.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          mkdir -p /tmp/ait && cd /tmp/ait && /tmp/appimagetool.AppImage --appimage-extract > /dev/null && cd "$GITHUB_WORKSPACE"
+          for appimage in target/release/bundle/appimage/*.AppImage; do
+            [ -f "$appimage" ] || continue
+            echo "Patching $appimage..."
+            rm -rf /tmp/app-root
+            mkdir -p /tmp/app-root && cd /tmp/app-root && "$GITHUB_WORKSPACE/$appimage" --appimage-extract > /dev/null && cd "$GITHUB_WORKSPACE"
+            rm -f /tmp/app-root/squashfs-root/usr/lib/libwayland-*.so*
+            ARCH=x86_64 /tmp/ait/squashfs-root/AppRun /tmp/app-root/squashfs-root "$appimage"
+            rm -rf /tmp/app-root
+          done
+          rm -rf /tmp/ait /tmp/appimagetool.AppImage
 
       - name: Prepare build artifacts
         run: |

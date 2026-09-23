@@ -35,4 +35,5 @@
   5. Slide jump filmstrip.
 - **Multitasking Resilience**: The Audience window MUST remain rock-solid, fullscreen, and rendered on the secondary monitor even when the user switches windows or works in another application on the primary monitor.
 - **Event Synchronization**: Slide navigation in the console or via hotkeys (`F5`, `Space`, `ArrowRight`, `ArrowLeft`, `B` for blackout) broadcasts instant sync events to the audience window.
+- **Single-Monitor & Fullscreen Behavior**: When presenting (especially on single-screen setups like laptops), the main window MUST automatically enter fullscreen mode (`set_fullscreen(true)`) upon entering presentation mode, and restore normal window size (`set_fullscreen(false)`) upon exiting (`Esc` / `exitPresent()`). The user's desktop workspace and wallpaper must NEVER be visible around or through the presentation window.
 
